@@ -31,9 +31,13 @@ it does. No daemon, no RPC bridge, no credential forwarding.
 User invokes Claude Code / Codex
   └── Skill auto-activates (SKILL.md loaded into context)
         ├── detect.sh → identifies runtime (docker / podman / lima)
+        │              → checks for pipelock (optional)
+        │              → offers install.sh if nothing found
         ├── sandbox.sh create → spins up ephemeral container
+        │                     → exposes ports for webdev (--ports=3000,5173)
         ├── sandbox.sh exec → all code runs inside container
         ├── harden.sh → applies network allowlist
+        ├── pipelock (optional) → scans web content for prompt injection
         ├── audit.sh → logs all operations to audit trail
         └── sandbox.sh destroy → tears down on completion
 ```
@@ -45,10 +49,11 @@ sandshell/
 ├── SKILL.md                  # Main skill instructions (auto-invoked)
 ├── CLAUDE.md                 # Dev instructions for contributing
 ├── scripts/
-│   ├── detect.sh             # Runtime detection (docker/podman/lima)
+│   ├── detect.sh             # Runtime detection (docker/podman/lima/pipelock)
 │   ├── sandbox.sh            # Container lifecycle (create/exec/destroy)
 │   ├── harden.sh             # Network hardening (iptables allowlist)
-│   └── audit.sh              # Audit trail logging
+│   ├── audit.sh              # Audit trail logging
+│   └── install.sh            # Runtime & tool installer
 ├── profiles/
 │   ├── default.conf          # Default network profile (github, npm, pypi)
 │   ├── node.conf             # Node.js project allowlist
@@ -168,7 +173,7 @@ Subcommands:
 
 | Command | What it does |
 |---------|-------------|
-| `create <name> [--runtime=X] [--mount=rw\|ro]` | Spin up container, mount CWD |
+| `create <name> [--runtime=X] [--mount=rw\|ro] [--ports=3000,5173]` | Spin up container, mount CWD, expose ports |
 | `exec <name> <cmd...>` | Run command inside container |
 | `copy-in <name> <src> <dest>` | Copy file into container |
 | `copy-out <name> <src> <dest>` | Copy file out of container |
@@ -253,6 +258,35 @@ skill format. Behavioral differences:
 The skill detects which agent it's running under via environment variables
 and adjusts instructions accordingly.
 
+## Threat model
+
+### What sandshell prevents
+
+| Threat | How |
+|--------|-----|
+| Supply chain attacks (malicious packages) | Installs happen in ephemeral container; can't touch host |
+| Blast radius from bugs | Broken code can't corrupt host filesystem |
+| Network exfiltration | iptables allowlist blocks unauthorized outbound |
+| Credential theft via code execution | No host credentials inside container |
+| Persistent compromise | Container destroyed after task — nothing persists |
+
+### What sandshell does NOT prevent (and mitigation)
+
+| Threat | Why not | Mitigation |
+|--------|---------|------------|
+| Prompt injection from web content | Attack is in the context window, not code | Pipelock (optional) scans fetched content |
+| Agent non-compliance | Instruction-based, not enforced | Audit trail detects non-compliance |
+| Host-side tool abuse (git push, gh) | These must run on host | Agent logs all host commands with reason |
+| Credential exfiltration via allowed domains | Agent has env vars, container has network | Network hardening limits where data can go |
+
+### Defense layers
+
+1. **Execution isolation** — code runs in container, not on host
+2. **Network hardening** — iptables allowlist, domain-based
+3. **Permission minimization** — read-only mounts, no dangerous flags
+4. **Prompt injection scanning** — Pipelock (optional) scans web content
+5. **Audit trail** — JSONL log of every operation for compliance verification
+
 ## What this is NOT
 
 - **Not a security boundary** — defense-in-depth via instruction, not enforcement
@@ -264,22 +298,26 @@ and adjusts instructions accordingly.
 ## Launch plan
 
 ### v0.1 — MVP (target: this week)
-- [ ] detect.sh (docker + lima)
-- [ ] sandbox.sh (create, exec, destroy)
-- [ ] harden.sh (domain allowlist, default profile)
-- [ ] audit.sh (init, log, show)
-- [ ] SKILL.md (auto-invoke, full behavioral contract)
-- [ ] README.md
+- [x] detect.sh (docker + podman + lima + pipelock detection)
+- [x] sandbox.sh (create, exec, copy-in, copy-out, destroy, list)
+- [x] sandbox.sh --ports for webdev
+- [x] harden.sh (domain allowlist, profiles)
+- [x] audit.sh (init, log, show, summary)
+- [x] install.sh (docker, lima, pipelock)
+- [x] Network profiles (default, node, python, minimal)
+- [x] SKILL.md (auto-invoke, full behavioral contract)
+- [x] README.md
 - [ ] Manual testing with Claude Code
+- [ ] Manual testing with Codex
 
-### v0.2 — Polish
-- [ ] Network profiles (node, python, minimal)
-- [ ] `sandbox.sh copy-in/copy-out`
-- [ ] Audit summary + retention
-- [ ] Codex-specific testing
+### v0.2 — Harden
+- [ ] Pipelock integration testing (fetch proxy mode)
+- [ ] Audit summary reports (compliance score)
 - [ ] Shell test suite
+- [ ] CI with GitHub Actions
 
 ### v0.3 — Distribution
+- [ ] GitHub repo public
 - [ ] Published to skill catalogs
 - [ ] Blog post / launch
 - [ ] Community feedback loop

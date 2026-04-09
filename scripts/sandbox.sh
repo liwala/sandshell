@@ -35,19 +35,20 @@ detect_runtime() {
 # ─── Commands ────────────────────────────────────────────────────────
 
 cmd_create() {
-  local name="" runtime="" mount_mode="ro"
+  local name="" runtime="" mount_mode="ro" ports=""
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --runtime=*) runtime="${1#*=}"; shift ;;
       --mount=*)   mount_mode="${1#*=}"; shift ;;
+      --ports=*)   ports="${1#*=}"; shift ;;
       -*)          echo "Unknown flag: $1" >&2; exit 1 ;;
       *)           name="$1"; shift ;;
     esac
   done
 
   if [[ -z "$name" ]]; then
-    echo "Usage: sandbox.sh create <name> [--runtime=docker|lima] [--mount=ro|rw]" >&2
+    echo "Usage: sandbox.sh create <name> [--runtime=docker|lima] [--mount=ro|rw] [--ports=3000,5173]" >&2
     exit 1
   fi
 
@@ -58,26 +59,25 @@ cmd_create() {
 
   case "$runtime" in
     docker|podman)
-      _create_container "$runtime" "$name" "$mount_mode"
+      _create_container "$runtime" "$name" "$mount_mode" "$ports"
       ;;
     lima)
-      _create_lima "$name" "$mount_mode"
+      _create_lima "$name" "$mount_mode" "$ports"
       ;;
     none)
       echo "ERROR: No container runtime available." >&2
-      echo "Install Docker: https://docs.docker.com/get-docker/" >&2
-      echo "Or Lima: https://lima-vm.io" >&2
+      echo "Run: $SCRIPT_DIR/install.sh docker   (or: lima)" >&2
       exit 1
       ;;
   esac
 
   audit_log "$session_id" "create" "sandbox.sh create $name" \
-    "\"runtime\":\"$runtime\",\"mount\":\"$mount_mode\""
-  echo "Sandbox '$name' created (runtime=$runtime, mount=$mount_mode)"
+    "\"runtime\":\"$runtime\",\"mount\":\"$mount_mode\",\"ports\":\"$ports\""
+  echo "Sandbox '$name' created (runtime=$runtime, mount=$mount_mode${ports:+, ports=$ports})"
 }
 
 _create_container() {
-  local runtime="$1" name="$2" mount_mode="$3"
+  local runtime="$1" name="$2" mount_mode="$3" ports="${4:-}"
   local mount_flag="ro"
   [[ "$mount_mode" = "rw" ]] && mount_flag="rw"
 
@@ -91,12 +91,21 @@ _create_container() {
     return 0
   fi
 
+  local port_args=()
+  if [[ -n "$ports" ]]; then
+    IFS=',' read -ra port_list <<< "$ports"
+    for port in "${port_list[@]}"; do
+      port_args+=("-p" "127.0.0.1:${port}:${port}")
+    done
+  fi
+
   "$runtime" run -d \
     --name "$name" \
     --label "sandshell.managed=true" \
     --entrypoint sleep \
     -v "$(pwd):/workspace:${mount_flag}" \
     -w /workspace \
+    "${port_args[@]+"${port_args[@]}"}" \
     "$SANDSHELL_IMAGE" \
     infinity >/dev/null
 
@@ -109,7 +118,7 @@ _create_container() {
 }
 
 _create_lima() {
-  local name="$1" mount_mode="$2"
+  local name="$1" mount_mode="$2" ports="${3:-}"
   local writable="false"
   [[ "$mount_mode" = "rw" ]] && writable="true"
 
@@ -128,6 +137,17 @@ sys.exit(1)
     return 0
   fi
 
+  # Build port forwarding rules
+  local port_forwards=""
+  if [[ -n "$ports" ]]; then
+    port_forwards="portForwards:"$'\n'
+    IFS=',' read -ra port_list <<< "$ports"
+    for port in "${port_list[@]}"; do
+      port_forwards+="  - guestPort: ${port}"$'\n'
+      port_forwards+="    hostIP: \"127.0.0.1\""$'\n'
+    done
+  fi
+
   # Create minimal Lima YAML
   local config
   config=$(mktemp)
@@ -141,7 +161,7 @@ mounts:
   - location: "$(pwd)"
     mountPoint: "/workspace"
     writable: ${writable}
-cpus: 2
+${port_forwards}cpus: 2
 memory: "2GiB"
 disk: "10GiB"
 YAML
@@ -295,7 +315,7 @@ case "${1:-help}" in
     echo "Usage: sandbox.sh <create|exec|copy-in|copy-out|status|destroy|list>"
     echo ""
     echo "Commands:"
-    echo "  create  <name> [--runtime=docker|lima] [--mount=ro|rw]"
+    echo "  create  <name> [--runtime=docker|lima] [--mount=ro|rw] [--ports=3000,5173]"
     echo "  exec    <name> <command...>"
     echo "  copy-in <name> <src> <dest>"
     echo "  copy-out <name> <src> <dest>"

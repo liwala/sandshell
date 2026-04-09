@@ -86,12 +86,18 @@ ops = {}
 host_cmds = 0
 sandbox_cmds = 0
 failures = 0
+host_categories = {}
+unclassified = []
 
 for e in entries:
     op = e.get('op', 'unknown')
     ops[op] = ops.get(op, 0) + 1
-    if op == 'host_cmd':
+    if op in ('host_cmd', 'host_bash'):
         host_cmds += 1
+        cat = e.get('category', 'unknown')
+        host_categories[cat] = host_categories.get(cat, 0) + 1
+        if cat == 'unclassified':
+            unclassified.append(e.get('cmd', '?')[:80])
     elif op == 'exec':
         sandbox_cmds += 1
     if e.get('exit_code', 0) != 0 and 'exit_code' in e:
@@ -101,12 +107,20 @@ print(f'Session: $session_id')
 print(f'Total operations: {total}')
 print(f'Sandbox commands: {sandbox_cmds}')
 print(f'Host commands: {host_cmds}')
+if host_categories:
+    print(f'Host breakdown: {host_categories}')
 print(f'Failures: {failures}')
 print(f'Operations: {ops}')
 
 if host_cmds + sandbox_cmds > 0:
     ratio = sandbox_cmds / (host_cmds + sandbox_cmds) * 100
     print(f'Sandbox ratio: {ratio:.0f}%')
+
+if unclassified:
+    print(f'')
+    print(f'Unclassified host commands ({len(unclassified)}):')
+    for cmd in unclassified[:10]:
+        print(f'  - {cmd}')
 "
 }
 

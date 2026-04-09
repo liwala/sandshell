@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
-# sandshell: detect available container runtimes
+# sandshell: detect available container runtimes and optional tools
 set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 detect_binary() {
   local name="$1"
@@ -24,7 +26,6 @@ runtime="none"
 if detect_binary docker 2>/dev/null; then
   # Verify daemon is actually running
   if docker info >/dev/null 2>&1; then
-    runtime="${runtime:-docker}"
     [ "$runtime" = "none" ] && runtime="docker"
   else
     echo "docker_daemon=false"
@@ -43,5 +44,15 @@ echo "runtime=${runtime}"
 
 if [ "$runtime" = "none" ]; then
   echo "# WARNING: No container runtime found."
-  echo "# Install Docker (https://docs.docker.com/get-docker/) or Lima (https://lima-vm.io)."
+  echo "# Run: ${SCRIPT_DIR}/install.sh docker   (or: lima)"
+fi
+
+# Optional: Pipelock (prompt injection scanning)
+if command -v pipelock >/dev/null 2>&1; then
+  echo "pipelock_available=true"
+  echo "pipelock_version=$(pipelock version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+[.0-9]*' || echo 'unknown')"
+else
+  echo "pipelock_available=false"
+  echo "# Optional: Install Pipelock for prompt injection scanning"
+  echo "# brew install luckyPipewrench/tap/pipelock"
 fi
