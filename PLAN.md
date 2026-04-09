@@ -15,31 +15,48 @@ it does. No daemon, no RPC bridge, no credential forwarding.
 
 ## Design principles
 
-1. **Instruct, don't enforce** — sandshell is defense-in-depth via agent
-   instruction, not a security boundary. The audit trail closes the gap.
-2. **Dumb containers** — `ubuntu:24.04` + `sleep infinity`. No init system,
+1. **Tiered defense** — works without Docker. Native OS sandbox (Seatbelt/
+   bubblewrap) is the baseline; containers add full isolation on top.
+2. **Enforce where possible, instruct where not** — Tier 1 (native sandbox)
+   is kernel-enforced. Tier 2 (containers) is instruction-based. Audit trail
+   closes the gap.
+3. **Dumb containers** — `ubuntu:24.04` + `sleep infinity`. No init system,
    no supervisor. The agent drives everything via `docker exec`.
-3. **Network allowlist** — iptables inside the container, domain-based.
-   Only the domains the task needs are reachable.
-4. **Audit everything** — every command the wrapper runs is logged with
-   timestamp, exit code, and truncated output. Independent of agent self-report.
-5. **Zero install** — pure bash + markdown. `git clone` and go.
+4. **Network allowlist** — iptables inside the container + OS-level domain
+   allowlist on the host. Two layers, same profiles.
+5. **Audit everything** — every command the wrapper runs is logged with
+   timestamp, exit code, and truncated output. PostToolUse hooks capture
+   commands that bypass the wrappers.
+6. **Zero install** — pure bash + markdown. `git clone` and go. Docker/Lima
+   are optional for Tier 2. Pipelock is optional for Tier 3.
 
 ## Architecture
 
 ```
 User invokes Claude Code / Codex
   └── Skill auto-activates (SKILL.md loaded into context)
-        ├── detect.sh → identifies runtime (docker / podman / lima)
-        │              → checks for pipelock (optional)
-        │              → offers install.sh if nothing found
-        ├── sandbox.sh create → spins up ephemeral container
-        │                     → exposes ports for webdev (--ports=3000,5173)
-        ├── sandbox.sh exec → all code runs inside container
-        ├── harden.sh → applies network allowlist
-        ├── pipelock (optional) → scans web content for prompt injection
-        ├── audit.sh → logs all operations to audit trail
-        └── sandbox.sh destroy → tears down on completion
+        │
+        ├── Tier 1: Native OS sandbox (always, kernel-enforced)
+        │   ├── setup-sandbox.sh → configures CC settings.json
+        │   ├── Seatbelt (macOS) / bubblewrap (Linux)
+        │   ├── Filesystem: writes restricted to project dir
+        │   ├── Network: domain allowlist (same profiles as Tier 2)
+        │   └── --dangerouslyDisableSandbox denied
+        │
+        ├── Tier 2: Container isolation (when Docker/Lima available)
+        │   ├── detect.sh → identifies runtime
+        │   ├── sandbox.sh create → ephemeral container + port exposure
+        │   ├── sandbox.sh exec → all code runs inside container
+        │   ├── harden.sh → iptables network allowlist
+        │   └── sandbox.sh destroy → teardown on completion
+        │
+        ├── Tier 3: Prompt injection scanning (optional)
+        │   └── Pipelock → scans fetched web content
+        │
+        └── Audit trail (all tiers)
+            ├── audit.sh → script-level logging
+            ├── hook-post-bash.sh → PostToolUse hook (all Bash commands)
+            └── Agent self-reporting → decision reasoning
 ```
 
 ## Repo structure
@@ -49,10 +66,14 @@ sandshell/
 ├── SKILL.md                  # Main skill instructions (auto-invoked)
 ├── CLAUDE.md                 # Dev instructions for contributing
 ├── scripts/
-│   ├── detect.sh             # Runtime detection (docker/podman/lima/pipelock)
+│   ├── detect.sh             # Runtime + sandbox + hooks + pipelock detection
+│   ├── setup.sh              # One-command setup for all protection layers
+│   ├── setup-sandbox.sh      # Configure CC native OS sandbox
+│   ├── setup-hooks.sh        # Configure PostToolUse audit hooks
 │   ├── sandbox.sh            # Container lifecycle (create/exec/destroy)
 │   ├── harden.sh             # Network hardening (iptables allowlist)
 │   ├── audit.sh              # Audit trail logging
+│   ├── hook-post-bash.sh     # PostToolUse hook script
 │   └── install.sh            # Runtime & tool installer
 ├── profiles/
 │   ├── default.conf          # Default network profile (github, npm, pypi)
@@ -279,33 +300,44 @@ and adjusts instructions accordingly.
 | Host-side tool abuse (git push, gh) | These must run on host | Agent logs all host commands with reason |
 | Credential exfiltration via allowed domains | Agent has env vars, container has network | Network hardening limits where data can go |
 
-### Defense layers
+### Defense tiers
 
-1. **Execution isolation** — code runs in container, not on host
-2. **Network hardening** — iptables allowlist, domain-based
-3. **Permission minimization** — read-only mounts, no dangerous flags
-4. **Prompt injection scanning** — Pipelock (optional) scans web content
-5. **Audit trail** — JSONL log of every operation for compliance verification
+| Tier | What | Enforcement | Requires |
+|------|------|-------------|----------|
+| 1 | Native OS sandbox | Kernel-level (Seatbelt/bubblewrap) | Nothing (built into OS) |
+| 2 | Container isolation | Process-level (Docker/Lima) | Docker, Podman, or Lima |
+| 3 | Prompt injection scanning | Content-level (Pipelock) | Pipelock (optional) |
+| - | Audit trail | Hook + script logging | jq (for hooks) |
+
+Tier 1 alone is meaningful protection. Each tier adds to the last.
+
+Note: Container isolation (Tier 2) runs Linux — covers web, backend, CLI,
+and infrastructure dev. macOS/Windows-native dev (Xcode, .NET desktop) is
+not supported in containers but still benefits from Tier 1.
 
 ## What this is NOT
 
-- **Not a security boundary** — defense-in-depth via instruction, not enforcement
+- **Not a full security boundary** — Tier 1 is kernel-enforced, but Tier 2
+  is instruction-based. The audit trail is how you verify compliance.
 - **Not a replacement for letai** — letai does multi-agent orchestration, issue
   tracking, and workflow automation. sandshell is one skill.
-- **Not deterministic** — the agent follows instructions probabilistically.
-  The audit trail is how you verify compliance.
+- **Not a Linux-only tool** — Tier 1 works on macOS and Linux natively.
+  Tier 2 (containers) runs Linux workloads on any host OS.
 
 ## Launch plan
 
 ### v0.1 — MVP (target: this week)
-- [x] detect.sh (docker + podman + lima + pipelock detection)
-- [x] sandbox.sh (create, exec, copy-in, copy-out, destroy, list)
-- [x] sandbox.sh --ports for webdev
+- [x] detect.sh (runtime + native sandbox + hooks + pipelock detection)
+- [x] sandbox.sh (create, exec, copy-in, copy-out, destroy, list, --ports)
 - [x] harden.sh (domain allowlist, profiles)
-- [x] audit.sh (init, log, show, summary)
+- [x] audit.sh (init, log, show, summary with host breakdown)
 - [x] install.sh (docker, lima, pipelock)
+- [x] setup.sh (one-command setup for all tiers)
+- [x] setup-sandbox.sh (CC native OS sandbox configuration)
+- [x] setup-hooks.sh (PostToolUse audit hooks)
+- [x] hook-post-bash.sh (Bash command capture + classification)
 - [x] Network profiles (default, node, python, minimal)
-- [x] SKILL.md (auto-invoke, full behavioral contract)
+- [x] SKILL.md (tiered auto-invoke, full behavioral contract)
 - [x] README.md
 - [ ] Manual testing with Claude Code
 - [ ] Manual testing with Codex

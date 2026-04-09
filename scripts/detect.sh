@@ -47,6 +47,49 @@ if [ "$runtime" = "none" ]; then
   echo "# Run: ${SCRIPT_DIR}/install.sh docker   (or: lima)"
 fi
 
+# Native OS sandbox (Seatbelt on macOS, bubblewrap on Linux)
+case "$(uname -s)" in
+  Darwin)
+    # macOS always has Seatbelt (sandbox-exec)
+    if command -v sandbox-exec >/dev/null 2>&1; then
+      echo "native_sandbox=seatbelt"
+    else
+      echo "native_sandbox=none"
+    fi
+    ;;
+  Linux)
+    if command -v bwrap >/dev/null 2>&1; then
+      echo "native_sandbox=bubblewrap"
+    else
+      echo "native_sandbox=none"
+      echo "# Optional: apt install bubblewrap (for OS-level sandboxing)"
+    fi
+    ;;
+  *)
+    echo "native_sandbox=none"
+    ;;
+esac
+
+# Check if Claude Code sandbox is configured
+if [[ -f "$HOME/.claude/settings.json" ]] && grep -q '"sandshell_managed"' "$HOME/.claude/settings.json" 2>/dev/null; then
+  echo "cc_sandbox_configured=true"
+elif [[ -f ".claude/settings.json" ]] && grep -q '"sandshell_managed"' ".claude/settings.json" 2>/dev/null; then
+  echo "cc_sandbox_configured=true"
+else
+  echo "cc_sandbox_configured=false"
+  echo "# Recommended: ${SCRIPT_DIR}/setup-sandbox.sh personal --profile=default"
+fi
+
+# Check if audit hooks are configured
+if [[ -f "$HOME/.claude/settings.json" ]] && grep -q "hook-post-bash.sh" "$HOME/.claude/settings.json" 2>/dev/null; then
+  echo "audit_hooks_configured=true"
+elif [[ -f ".claude/settings.json" ]] && grep -q "hook-post-bash.sh" ".claude/settings.json" 2>/dev/null; then
+  echo "audit_hooks_configured=true"
+else
+  echo "audit_hooks_configured=false"
+  echo "# Recommended: ${SCRIPT_DIR}/setup-hooks.sh personal"
+fi
+
 # Optional: Pipelock (prompt injection scanning)
 if command -v pipelock >/dev/null 2>&1; then
   echo "pipelock_available=true"

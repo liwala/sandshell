@@ -1,67 +1,127 @@
 # sandshell
 
-A Claude Code + Codex skill that makes AI coding agents execute all code in
-disposable, network-hardened containers with a full audit trail.
+Defense-in-depth for AI coding agents. A Claude Code + Codex skill that
+protects your machine with tiered security — from kernel-enforced OS sandbox
+to disposable containers to prompt injection scanning.
 
-## What it does
-
-sandshell instructs your AI agent to:
-
-1. **Sandbox all code execution** in an ephemeral Docker/Lima container
-2. **Harden the network** to only allow domains the task needs
-3. **Expose dev server ports** for web development (bound to localhost only)
-4. **Log everything** to a JSONL audit trail for observability
-5. **Minimize permissions** — read-only mounts, no dangerous flags
-6. **Scan web content** for prompt injection (optional, via Pipelock)
-
-## Install
+## Quick start
 
 ```bash
-# For all your projects (personal skill)
+# Install the skill (for all your projects)
 git clone https://github.com/anthropics/sandshell ~/.claude/skills/sandshell
 
-# For one project only
-git clone https://github.com/anthropics/sandshell .claude/skills/sandshell
+# One-command setup for all protection layers
+~/.claude/skills/sandshell/scripts/setup.sh personal
 ```
 
-## Requirements
-
-- **Required:** Docker, Podman, or Lima
-- **Optional:** [Pipelock](https://github.com/luckyPipewrench/pipelock) for prompt injection scanning
-
-Don't have Docker or Lima? sandshell will detect this and offer to install:
-
-```bash
-# Install Docker
-~/.claude/skills/sandshell/scripts/install.sh docker
-
-# Or Lima (lighter, no daemon)
-~/.claude/skills/sandshell/scripts/install.sh lima
-
-# Optional: Pipelock for prompt injection scanning
-~/.claude/skills/sandshell/scripts/install.sh pipelock
-
-# Everything
-~/.claude/skills/sandshell/scripts/install.sh all
-```
+That's it. Restart Claude Code and sandshell auto-activates.
 
 ## How it works
 
-The skill auto-activates when your agent needs to write or run code.
-It injects behavioral instructions that tell the agent to:
+sandshell operates in three tiers. Each tier adds protection, but lower tiers
+work on their own — you don't need Docker to benefit.
 
-- Create a container before executing anything
-- Run all builds, tests, and scripts inside the container
-- Expose dev server ports for webdev projects (localhost only)
-- Apply iptables-based network hardening
-- Keep git/gh commands on the host (they need local credentials)
-- Scan fetched web content for prompt injection (if Pipelock installed)
-- Destroy the container when done
+### Tier 1: Native OS sandbox (kernel-enforced)
+
+Uses Claude Code's built-in sandbox backed by **Seatbelt** (macOS) or
+**bubblewrap** (Linux). This is enforced by the OS kernel — the agent
+**cannot** bypass it, even if prompt-injected.
+
+- Filesystem writes restricted to the project directory
+- Network limited to allowed domains (same profiles as Tier 2)
+- `--dangerouslyDisableSandbox` denied at the settings level
+- Optional `--strict` mode blocks reads to `~/.ssh`, `~/.aws`, `~/.kube`, etc.
+
+```bash
+# Configure with the default network profile
+setup-sandbox.sh personal --profile=default
+
+# Strict mode: also deny reads to sensitive directories
+setup-sandbox.sh personal --profile=node --strict
+```
+
+**No Docker required. Works on any macOS or Linux machine.**
+
+### Tier 2: Container isolation (ephemeral sandboxes)
+
+When Docker, Podman, or Lima is available, sandshell instructs the agent to
+run all code in a disposable container (`ubuntu:24.04` + `sleep infinity`).
+
+- Ephemeral filesystem — destroyed after the task
+- No host credentials inside the container
+- Read-only workspace mount by default
+- iptables-based network hardening inside the container
+- Dev server ports exposed to localhost for web development
+
+```bash
+# The agent does this automatically:
+sandbox.sh create sandshell-abc123 --ports=3000,5173
+sandbox.sh exec sandshell-abc123 npm install
+sandbox.sh exec sandshell-abc123 npm test
+harden.sh sandshell-abc123 --profile=node
+sandbox.sh destroy sandshell-abc123
+```
+
+**Note:** Containers run Linux. This covers web, backend, CLI, and
+infrastructure development. macOS/Windows-native dev (Xcode, .NET desktop)
+is not supported in containers but still benefits from Tier 1.
+
+### Tier 3: Prompt injection scanning (optional)
+
+If [Pipelock](https://github.com/luckyPipewrench/pipelock) is installed,
+sandshell integrates with it to scan web content fetched by the agent.
+
+- Jailbreak phrase detection
+- Zero-width character evasion
+- Credential request patterns
+- SSRF and DNS rebinding protection
+
+```bash
+# Install Pipelock
+install.sh pipelock
+```
+
+## Setup
+
+### One command (recommended)
+
+```bash
+~/.claude/skills/sandshell/scripts/setup.sh personal --profile=default
+```
+
+This configures:
+1. Native OS sandbox (Tier 1)
+2. PostToolUse audit hooks
+3. Checks for Docker/Lima
+4. Checks for Pipelock
+
+### Individual components
+
+```bash
+# Just the OS sandbox
+setup-sandbox.sh personal --profile=node --strict
+
+# Just the audit hooks
+setup-hooks.sh personal
+
+# Install a container runtime
+install.sh docker    # or: lima, pipelock, all
+```
+
+### Project-level setup
+
+```bash
+# Configure for this project only (committed to .claude/settings.json)
+setup.sh project --profile=python
+```
 
 ## Network profiles
 
-| Profile | Domains allowed | Auto-selected when |
-|---------|----------------|-------------------|
+Profiles control which domains are reachable, used by both the native
+sandbox (Tier 1) and container hardening (Tier 2).
+
+| Profile | Domains | Auto-selected when |
+|---------|---------|-------------------|
 | `minimal` | None (DNS only) | Manual only |
 | `default` | GitHub, npm, PyPI, Go proxy | `go.mod` or fallback |
 | `node` | Default + jsdelivr, unpkg, yarnpkg | `package.json` |
@@ -69,7 +129,8 @@ It injects behavioral instructions that tell the agent to:
 
 ## Port exposure
 
-For web development, the agent auto-detects and exposes dev server ports:
+For web development, the agent auto-detects and exposes dev server ports.
+All ports bind to `127.0.0.1` — never exposed to the network.
 
 | Framework | Ports |
 |-----------|-------|
@@ -77,75 +138,94 @@ For web development, the agent auto-detects and exposes dev server ports:
 | Django | 8000 |
 | Webpack, Go, Rust web | 8080 |
 
-All ports bind to `127.0.0.1` only — never exposed to the network.
-
-## Prompt injection scanning (optional)
-
-If [Pipelock](https://github.com/luckyPipewrench/pipelock) is installed,
-sandshell integrates with it to scan web content fetched by the agent.
-Pipelock sits inline and scans for:
-
-- Jailbreak phrases and instruction manipulation
-- Zero-width character evasion
-- Credential requests and data exfiltration attempts
-- SSRF and DNS rebinding attacks
-
-This is optional — sandshell works without Pipelock, but logs that web
-content was not scanned.
-
 ## Audit trail
 
-Every operation is logged to `~/.sandshell/audit/<session>.jsonl`:
+Every operation is logged to `~/.sandshell/audit/<session>.jsonl`.
 
 ```bash
 # View the trail
-./scripts/audit.sh show <session-id>
+audit.sh show <session-id>
 
 # Get stats
-./scripts/audit.sh summary <session-id>
+audit.sh summary <session-id>
 ```
 
-The summary includes a **sandbox ratio** — what percentage of commands ran
-inside the sandbox vs on the host.
+Three layers of logging:
 
-### Complete audit coverage with hooks
+1. **Script-level** — `sandbox.sh` and `harden.sh` log automatically
+   (ground truth, independent of agent behavior)
+2. **PostToolUse hooks** — captures every Bash command the agent runs on the
+   host, classified as `git`, `github_cli`, `container_mgmt`, `read_only`,
+   or `unclassified`
+3. **Agent self-reporting** — the skill instructs the agent to log its
+   reasoning for host-vs-sandbox decisions
 
-By default, the audit trail only captures commands that go through
-`sandbox.sh`. To log *every* Bash command the agent runs (including direct
-host commands), install the PostToolUse hook:
+The summary shows a **sandbox ratio** and flags unclassified host commands
+that may have bypassed the sandbox.
+
+### Hook setup
 
 ```bash
 # For all your projects
-~/.claude/skills/sandshell/scripts/setup-hooks.sh personal
+setup-hooks.sh personal
 
 # For this project only
-~/.claude/skills/sandshell/scripts/setup-hooks.sh project
+setup-hooks.sh project
 ```
-
-This gives you complete observability — every command classified as `git`,
-`github_cli`, `container_mgmt`, `read_only`, or `unclassified`. The summary
-highlights unclassified host commands that may have bypassed the sandbox.
 
 Requires `jq` (`brew install jq` / `apt install jq`).
 
 ## Threat model
 
-**sandshell prevents:** supply chain attacks, blast radius from bugs,
-network exfiltration, credential theft via code execution, persistent
-compromise.
+### What sandshell prevents
 
-**sandshell does NOT prevent:** prompt injection from web content (use
-Pipelock for this), agent non-compliance (audit trail detects it), host-side
-tool abuse (git/gh must run on host).
+| Threat | How | Tier |
+|--------|-----|------|
+| Writes outside project dir | OS sandbox restricts filesystem | 1 |
+| Network exfiltration from host | OS sandbox domain allowlist | 1 |
+| `--dangerouslyDisableSandbox` bypass | Denied in settings.json | 1 |
+| Reads to `~/.ssh`, `~/.aws` | `--strict` mode denies sensitive paths | 1 |
+| Supply chain attacks (malicious packages) | Installs in ephemeral container | 2 |
+| Credential theft via code execution | No host credentials in container | 2 |
+| Blast radius from bugs | Container filesystem is disposable | 2 |
+| Network exfiltration from code | iptables allowlist inside container | 2 |
+| Prompt injection from web content | Pipelock scans fetched content | 3 |
 
-See [PLAN.md](PLAN.md) for the full threat model breakdown.
+### What sandshell does NOT prevent
 
-## Important
+| Threat | Why not | Mitigation |
+|--------|---------|------------|
+| Agent ignoring container instructions | Tier 2 is instruction-based | Audit trail detects non-compliance |
+| Host-side git/gh abuse | These must run on host | Hooks log all host commands |
+| Read access to project files | Agent needs to read code | `--strict` mode limits sensitive dirs |
 
-sandshell is **defense-in-depth**, not a security boundary. It instructs the
-agent to sandbox itself — the agent follows these instructions with high
-reliability but not with certainty. The audit trail is how you verify
-compliance.
+### Key insight
+
+Tier 1 is **enforced**. Tier 2 is **instructed**. The audit trail bridges
+the gap — you can verify whether the agent actually followed the instructions.
+
+## Requirements
+
+- **Tier 1:** Nothing — macOS has Seatbelt built-in, Linux needs `bubblewrap`
+- **Tier 2:** Docker, Podman, or Lima
+- **Tier 3:** [Pipelock](https://github.com/luckyPipewrench/pipelock)
+- **Hooks:** `jq`
+
+## Install
+
+```bash
+# The skill itself
+git clone https://github.com/anthropics/sandshell ~/.claude/skills/sandshell
+
+# Container runtime (if you don't have one)
+~/.claude/skills/sandshell/scripts/install.sh docker   # or: lima
+
+# Pipelock (optional)
+~/.claude/skills/sandshell/scripts/install.sh pipelock
+
+# Everything
+~/.claude/skills/sandshell/scripts/install.sh all
+```
 
 ## License
 
