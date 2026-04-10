@@ -329,6 +329,22 @@ git clone https://github.com/anthropics/sandshell ~/sandshell
 ~/sandshell/scripts/install.sh pipelock
 ```
 
+## Going further
+
+sandshell is defense-in-depth via skill instructions and OS-level sandbox
+configuration. It's a meaningful layer of protection for everyday development
+with AI agents.
+
+If you need **enforced isolation** — where the agent physically cannot access
+your host regardless of instructions — look at
+[sbx](https://github.com/anthropics/sbx), which runs agents in fully isolated
+cloud sandboxes with no host access at all.
+
+We're also building [letai](https://github.com/anthropics/letai), a platform
+for orchestrating AI coding agents with built-in isolation, credential
+management, multi-agent workflows, and structured issue tracking. sandshell
+is a taste of that security model, packaged as a skill you can use today.
+
 ## License
 
 MIT
