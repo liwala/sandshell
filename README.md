@@ -337,8 +337,8 @@ with AI agents.
 
 If you need **enforced isolation** — where the agent physically cannot access
 your host regardless of instructions — look at
-[sbx](https://github.com/anthropics/sbx-api), which provides Docker-based
-sandboxed environments purpose-built for AI agent execution.
+[Docker AI Sandboxes](https://docs.docker.com/ai/sandboxes/), which provides
+Docker-based sandboxed environments purpose-built for AI agent execution.
 
 We're also building **letai**, a platform for orchestrating AI coding agents
 with built-in isolation, credential management, multi-agent workflows, and
