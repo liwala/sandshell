@@ -1,8 +1,8 @@
 # sandshell
 
-Defense-in-depth for AI coding agents. A Claude Code + Codex skill that
-protects your machine with tiered security — from kernel-enforced OS sandbox
-to disposable containers to prompt injection scanning.
+Defense-in-depth for AI coding agents. Works with **Claude Code**, **Codex**,
+**Gemini CLI**, and **Amp**. Protects your machine with tiered security — from
+kernel-enforced OS sandbox to disposable containers to prompt injection scanning.
 
 ## Why
 
@@ -74,14 +74,33 @@ Tier 2 uses ephemeral containers — nothing persists after the task.
 ## Quick start
 
 ```bash
-# Install the skill (for all your projects)
-git clone https://github.com/anthropics/sandshell ~/.claude/skills/sandshell
+# Clone the repo
+git clone https://github.com/anthropics/sandshell ~/sandshell
 
-# One-command setup for all protection layers
-~/.claude/skills/sandshell/scripts/setup.sh personal
+# Install for your agent(s)
+~/sandshell/scripts/install-agent.sh claude     # Claude Code
+~/sandshell/scripts/install-agent.sh codex      # OpenAI Codex CLI
+~/sandshell/scripts/install-agent.sh gemini     # Gemini CLI
+~/sandshell/scripts/install-agent.sh amp        # Amp (Sourcegraph)
+~/sandshell/scripts/install-agent.sh all        # All of the above
+
+# Set up OS sandbox + audit hooks (Claude Code / Codex)
+~/sandshell/scripts/setup.sh personal
 ```
 
-That's it. Restart Claude Code and sandshell auto-activates.
+Restart your agent and sandshell auto-activates.
+
+## Supported agents
+
+| Agent | Install method | Hooks | Native sandbox | Full support |
+|-------|---------------|-------|----------------|-------------|
+| **Claude Code** | `SKILL.md` in `.claude/skills/` | PostToolUse | Seatbelt/bwrap | Yes |
+| **Codex CLI** | `SKILL.md` in `.codex/skills/` | Notification only | Seatbelt/Seccomp | Yes (no audit hooks) |
+| **Gemini CLI** | Appends to `GEMINI.md` | No | Permission-based | Tier 2 + 3 only |
+| **Amp** | Appends to `AGENTS.md` | No | No | Tier 2 + 3 only |
+
+All agents share the same scripts (`sandbox.sh`, `harden.sh`, `audit.sh`).
+The difference is how each agent discovers the instructions.
 
 ## How it works
 
@@ -297,17 +316,17 @@ rm -rf ~/.sandshell
 ## Install
 
 ```bash
-# The skill itself
-git clone https://github.com/anthropics/sandshell ~/.claude/skills/sandshell
+# Clone sandshell
+git clone https://github.com/anthropics/sandshell ~/sandshell
+
+# Install for your agent(s)
+~/sandshell/scripts/install-agent.sh all
 
 # Container runtime (if you don't have one)
-~/.claude/skills/sandshell/scripts/install.sh docker   # or: lima
+~/sandshell/scripts/install.sh docker   # or: lima
 
 # Pipelock (optional)
-~/.claude/skills/sandshell/scripts/install.sh pipelock
-
-# Everything
-~/.claude/skills/sandshell/scripts/install.sh all
+~/sandshell/scripts/install.sh pipelock
 ```
 
 ## License

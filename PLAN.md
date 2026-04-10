@@ -63,10 +63,13 @@ User invokes Claude Code / Codex
 
 ```
 sandshell/
-├── SKILL.md                  # Main skill instructions (auto-invoked)
+├── SKILL.md                  # Claude Code skill (auto-invoked)
 ├── CLAUDE.md                 # Dev instructions for contributing
+├── agents/
+│   └── SANDSHELL.md          # Agent-agnostic instruction template
 ├── scripts/
 │   ├── detect.sh             # Runtime + sandbox + hooks + pipelock detection
+│   ├── install-agent.sh      # Install for claude/codex/gemini/amp
 │   ├── setup.sh              # One-command setup for all protection layers
 │   ├── setup-sandbox.sh      # Configure CC native OS sandbox
 │   ├── setup-hooks.sh        # Configure PostToolUse audit hooks
@@ -267,17 +270,35 @@ Retention: keeps last 50 sessions by default. Configurable via
 The agent auto-selects based on project detection (package.json → node,
 pyproject.toml → python, go.mod → default, etc).
 
-## Codex compatibility
+## Multi-agent support
 
-Same SKILL.md works for both Claude Code and Codex since they share the
-skill format. Behavioral differences:
+sandshell supports four autonomous CLI agents. The scripts are universal —
+what differs is how each agent discovers the instructions.
 
-- Codex already sandboxes by default → sandshell adds network hardening
-  and audit trail on top
-- Claude Code needs explicit container creation → sandshell handles this
+| Agent | Instruction format | Install method |
+|-------|-------------------|---------------|
+| Claude Code | `SKILL.md` with frontmatter + bang-blocks | Symlink to `.claude/skills/` |
+| Codex CLI | `SKILL.md` with frontmatter (no bang-blocks) | Copy to `.codex/skills/` |
+| Gemini CLI | `GEMINI.md` (plain markdown) | Append to `GEMINI.md` |
+| Amp | `AGENTS.md` (plain markdown) | Append to `AGENTS.md` |
 
-The skill detects which agent it's running under via environment variables
-and adjusts instructions accordingly.
+### Agent-specific differences
+
+- **Claude Code**: Full support — SKILL.md with `${CLAUDE_SKILL_DIR}`,
+  bang-blocks for auto-detection, PostToolUse hooks for audit
+- **Codex CLI**: Has its own sandbox (Seatbelt/Seccomp) — sandshell adds
+  container isolation + network hardening on top. No PostToolUse hooks.
+- **Gemini CLI**: No hooks, no skill system. Instructions appended to
+  `GEMINI.md`. Tier 1 limited to permission minimization (no CC sandbox
+  config). Tier 2 (containers) works fully.
+- **Amp**: No hooks, no sandbox. Instructions appended to `AGENTS.md`.
+  Purely instruction-based — Tier 2 + audit trail.
+
+### Template system
+
+`agents/SANDSHELL.md` is the agent-agnostic template. `install-agent.sh`
+renders it with the correct paths for each agent. Claude Code uses its
+own `SKILL.md` directly (has features other agents don't support).
 
 ## Threat model
 
