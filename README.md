@@ -337,13 +337,13 @@ with AI agents.
 
 If you need **enforced isolation** — where the agent physically cannot access
 your host regardless of instructions — look at
-[sbx](https://github.com/anthropics/sbx), which runs agents in fully isolated
-cloud sandboxes with no host access at all.
+[sbx](https://github.com/anthropics/sbx-api), which provides Docker-based
+sandboxed environments purpose-built for AI agent execution.
 
-We're also building [letai](https://github.com/anthropics/letai), a platform
-for orchestrating AI coding agents with built-in isolation, credential
-management, multi-agent workflows, and structured issue tracking. sandshell
-is a taste of that security model, packaged as a skill you can use today.
+We're also building **letai**, a platform for orchestrating AI coding agents
+with built-in isolation, credential management, multi-agent workflows, and
+structured issue tracking. sandshell is a taste of that security model,
+packaged as a skill you can use today. Stay tuned.
 
 ## License
 
