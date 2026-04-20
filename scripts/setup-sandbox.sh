@@ -57,13 +57,17 @@ esac
 # Load allowed domains from profile
 domains=()
 profile_file="$PROFILES_DIR/${PROFILE}.conf"
-if [[ -f "$profile_file" ]]; then
-  while IFS= read -r line; do
-    line="${line%%#*}"
-    line="${line// /}"
-    [[ -n "$line" ]] && domains+=("$line")
-  done < "$profile_file"
+if [[ ! -f "$profile_file" ]]; then
+  echo "ERROR: Unknown profile '$PROFILE'. Available:" >&2
+  ls "$PROFILES_DIR"/*.conf 2>/dev/null | xargs -I{} basename {} .conf >&2
+  exit 1
 fi
+
+while IFS= read -r line; do
+  line="${line%%#*}"
+  line="${line// /}"
+  [[ -n "$line" ]] && domains+=("$line")
+done < "$profile_file"
 
 # Build the domains JSON array
 domains_json="[]"
@@ -168,5 +172,8 @@ fi
 echo ""
 echo "  macOS: enforced via Seatbelt (kernel-level)"
 echo "  Linux: enforced via bubblewrap (namespace-level)"
+echo ""
+echo "IMPORTANT: Start a fresh Claude Code session for this to take effect."
+echo "  --resume / --continue will NOT re-apply the sandbox — only a cold start does."
 echo ""
 echo "To remove: edit $SETTINGS_FILE and delete the sandbox/permissions entries."
