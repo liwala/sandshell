@@ -102,6 +102,7 @@ SANDBOX_CONFIG=$(jq -n \
       ]
     },
     "sandbox": {
+      "enabled": true,
       "filesystem": {
         "write": {
           "allowOnly": [".", "$TMPDIR"],
