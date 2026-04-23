@@ -85,8 +85,8 @@ install_codex() {
 ---
 name: sandshell
 description: >
-  Defense-in-depth for coding agents. Executes code in disposable,
-  network-hardened containers with full audit trail.
+  Defense-in-depth for coding agents. Focuses on Claude native sandboxing,
+  Bash hooks, and audit logging.
 ---
 
 HEADER
@@ -100,7 +100,7 @@ HEADER
     cp -r "$SANDSHELL_DIR/profiles" "$target_dir/profiles"
 
   echo "Codex CLI: installed to $target_dir"
-  echo "  Note: Codex has its own sandbox — sandshell adds container isolation + network hardening on top"
+  echo "  Note: this installs the sandshell skill only; setup.sh/setup-hooks.sh configure Claude Code settings, not Codex"
 }
 
 install_gemini() {

@@ -7,12 +7,11 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 usage() {
   echo "Usage: setup.sh [personal|project] [--profile=default|node|python|minimal] [--strict]"
   echo ""
-  echo "Configures all sandshell protection layers in one command:"
+  echo "Configures the supported sandshell release path in one command:"
   echo ""
   echo "  1. Claude Code native sandbox (OS-enforced filesystem + network restrictions)"
   echo "  2. Claude Code Bash guard + audit hooks"
-  echo "  3. Checks for container runtime (Docker/Lima)"
-  echo "  4. Checks for Pipelock (optional prompt injection scanning)"
+  echo "  3. Checks for Pipelock (optional prompt injection scanning)"
   echo ""
   echo "Options:"
   echo "  personal         Install to ~/.claude/settings.json (default)"
@@ -66,30 +65,8 @@ else
   echo ""
 fi
 
-# Step 3: Check container runtime
-echo "--- Layer 3: Container runtime ---"
-runtime="none"
-if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
-  runtime="docker"
-  echo "Docker detected. Container sandboxing available."
-elif command -v podman >/dev/null 2>&1; then
-  runtime="podman"
-  echo "Podman detected. Container sandboxing available."
-elif command -v limactl >/dev/null 2>&1; then
-  runtime="lima"
-  echo "Lima detected. VM sandboxing available."
-else
-  echo "No container runtime found."
-  echo "For full isolation, install one:"
-  echo "  $SCRIPT_DIR/install.sh docker"
-  echo "  $SCRIPT_DIR/install.sh lima"
-  echo ""
-  echo "sandshell will use the native OS sandbox (Layer 1) for now."
-fi
-echo ""
-
-# Step 4: Check Pipelock
-echo "--- Layer 4: Prompt injection scanning ---"
+# Step 3: Check Pipelock
+echo "--- Layer 3: Prompt injection scanning ---"
 if command -v pipelock >/dev/null 2>&1; then
   echo "Pipelock detected. Web content scanning available."
 else
@@ -105,8 +82,6 @@ echo ""
 echo "Protection layers active:"
 [[ "$SKIP_SANDBOX" = false ]] && echo "  [x] Native OS sandbox (kernel-enforced)"
 [[ "$SKIP_HOOKS" = false ]]   && echo "  [x] Audit hooks (all Bash commands logged)"
-[[ "$runtime" != "none" ]]    && echo "  [x] Container runtime ($runtime)"
-[[ "$runtime" = "none" ]]     && echo "  [ ] Container runtime (not installed)"
 command -v pipelock >/dev/null 2>&1 && echo "  [x] Pipelock (prompt injection scanning)"
 command -v pipelock >/dev/null 2>&1 || echo "  [ ] Pipelock (optional, not installed)"
 echo ""
@@ -115,4 +90,4 @@ echo "  echo test > \"\$HOME/sandshell-probe.txt\"   # should be Operation not p
 echo "  curl -sS --max-time 5 https://example.com  # should time out"
 echo "If either succeeds, enforcement is off — check sandbox.enabled and /config scopes."
 echo ""
-echo "Codex uses the installed skill, but this setup script does not configure Codex settings."
+echo "Codex can use the installed skill, but this setup script only configures Claude Code."

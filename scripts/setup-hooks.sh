@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# sandshell: configure Claude Code hooks for audit trail
+# sandshell: configure Claude Code Bash guard + audit trail hooks
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 HOOK_SCRIPT="$SCRIPT_DIR/hook-post-bash.sh"
+GUARD_SCRIPT="$SCRIPT_DIR/hook-pre-bash.sh"
 
 # Determine where to install — personal or project scope
 SCOPE="${1:-personal}"
@@ -25,8 +26,8 @@ case "$SCOPE" in
     echo "  personal  Install to ~/.claude/settings.json (default)"
     echo "  project   Install to .claude/settings.json"
     echo ""
-    echo "This configures a PostToolUse hook on Bash commands that logs"
-    echo "all host-side commands to the sandshell audit trail."
+    echo "This configures PreToolUse/PostToolUse hooks on Bash commands."
+    echo "The pre-hook blocks non-approved host commands; the post-hook logs them."
     exit 0
     ;;
   *)
@@ -45,8 +46,8 @@ fi
 
 mkdir -p "$SETTINGS_DIR"
 
-# The hook config we want to add
-HOOK_CONFIG=$(cat <<EOF
+# The hooks we want to add
+POST_HOOK_CONFIG=$(cat <<EOF
 {
   "matcher": "Bash",
   "hooks": [
@@ -60,9 +61,24 @@ HOOK_CONFIG=$(cat <<EOF
 EOF
 )
 
+PRE_HOOK_CONFIG=$(cat <<EOF
+{
+  "matcher": "Bash",
+  "hooks": [
+    {
+      "type": "command",
+      "command": "$GUARD_SCRIPT",
+      "timeout": 5000
+    }
+  ]
+}
+EOF
+)
+
 if [[ -f "$SETTINGS_FILE" ]]; then
-  # Check if sandshell hook already exists
-  if grep -q "hook-post-bash.sh" "$SETTINGS_FILE" 2>/dev/null; then
+  # Check if sandshell hooks already exist
+  if grep -q "hook-post-bash.sh" "$SETTINGS_FILE" 2>/dev/null && \
+     grep -q "hook-pre-bash.sh" "$SETTINGS_FILE" 2>/dev/null; then
     echo "sandshell hooks already configured in $SETTINGS_FILE"
     exit 0
   fi
@@ -70,35 +86,39 @@ if [[ -f "$SETTINGS_FILE" ]]; then
   # Merge into existing settings
   existing=$(cat "$SETTINGS_FILE")
 
-  # Check if PostToolUse array exists
-  if echo "$existing" | jq -e '.hooks.PostToolUse' >/dev/null 2>&1; then
-    # Append to existing PostToolUse array
-    updated=$(echo "$existing" | jq --argjson hook "$HOOK_CONFIG" \
-      '.hooks.PostToolUse += [$hook]')
-  elif echo "$existing" | jq -e '.hooks' >/dev/null 2>&1; then
-    # hooks exists but no PostToolUse
-    updated=$(echo "$existing" | jq --argjson hook "$HOOK_CONFIG" \
-      '.hooks.PostToolUse = [$hook]')
-  else
-    # No hooks at all
-    updated=$(echo "$existing" | jq --argjson hook "$HOOK_CONFIG" \
-      '.hooks = {"PostToolUse": [$hook]}')
-  fi
+  updated=$(echo "$existing" | jq \
+    --argjson pre_hook "$PRE_HOOK_CONFIG" \
+    --argjson post_hook "$POST_HOOK_CONFIG" '
+    .hooks = (.hooks // {}) |
+    .hooks.PreToolUse = (.hooks.PreToolUse // []) |
+    .hooks.PostToolUse = (.hooks.PostToolUse // []) |
+    if ([.hooks.PreToolUse[]?.hooks[]?.command] | index($pre_hook.hooks[0].command)) then
+      .
+    else
+      .hooks.PreToolUse += [$pre_hook]
+    end |
+    if ([.hooks.PostToolUse[]?.hooks[]?.command] | index($post_hook.hooks[0].command)) then
+      .
+    else
+      .hooks.PostToolUse += [$post_hook]
+    end
+  ')
 
   echo "$updated" | jq '.' > "$SETTINGS_FILE"
 else
   # Create new settings file
-  jq -n --argjson hook "$HOOK_CONFIG" \
-    '{"hooks": {"PostToolUse": [$hook]}}' > "$SETTINGS_FILE"
+  jq -n --argjson pre_hook "$PRE_HOOK_CONFIG" --argjson post_hook "$POST_HOOK_CONFIG" \
+    '{"hooks": {"PreToolUse": [$pre_hook], "PostToolUse": [$post_hook]}}' > "$SETTINGS_FILE"
 fi
 
 echo ""
 echo "Hooks configured in $SETTINGS_FILE"
 echo ""
 echo "What this does:"
+echo "  - Blocks obvious sandbox-disabling Bash commands before execution"
 echo "  - Logs every Bash command the agent runs on the host"
-echo "  - Classifies commands (git, github_cli, container_mgmt, read_only, unclassified)"
-echo "  - Skips commands already logged by sandbox.sh/harden.sh"
+echo "  - Classifies commands (git, github_cli, sandshell, read_only, unclassified)"
+echo "  - Skips direct audit.sh self-logging"
 echo "  - Writes to ~/.sandshell/audit/<session>.jsonl"
 echo ""
-echo "To remove, edit $SETTINGS_FILE and delete the sandshell PostToolUse entry."
+echo "To remove, edit $SETTINGS_FILE and delete the sandshell PreToolUse/PostToolUse entries."

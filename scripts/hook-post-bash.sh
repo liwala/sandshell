@@ -25,8 +25,8 @@ exit_code=$(echo "$input" | jq -r '.tool_response.exitCode // empty')
 # Use first 8 chars of session ID to match sandshell convention
 short_session="${session_id:0:8}"
 
-# Check if this command went through sandbox.sh (already logged) or was a direct host command
-if [[ "$command_str" == *"sandbox.sh"* ]] || [[ "$command_str" == *"harden.sh"* ]] || [[ "$command_str" == *"audit.sh"* ]]; then
+# Skip self-logging for direct audit writes.
+if [[ "$command_str" == *"audit.sh"* ]]; then
   exit 0  # Already logged by the scripts themselves
 fi
 
@@ -34,14 +34,17 @@ fi
 op="host_bash"
 category="unknown"
 
-# Known safe host commands
+# Known host command categories
 if [[ "$command_str" =~ ^git\ (push|pull|fetch|status|log|diff|add|commit|checkout|branch|merge|rebase) ]]; then
   category="git"
 elif [[ "$command_str" =~ ^gh\ (pr|issue|repo|release) ]]; then
   category="github_cli"
-elif [[ "$command_str" =~ ^(docker|podman|limactl)\ ]]; then
-  category="container_mgmt"
-elif [[ "$command_str" =~ ^(ls|pwd|cat|head|tail|wc|find|grep|which|echo|printf|date|whoami) ]]; then
+elif [[ "$command_str" == *"setup.sh"* ]] || [[ "$command_str" == *"setup-sandbox.sh"* ]] || \
+     [[ "$command_str" == *"setup-hooks.sh"* ]] || [[ "$command_str" == *"uninstall.sh"* ]] || \
+     [[ "$command_str" == *"detect.sh"* ]] || [[ "$command_str" == *"install-agent.sh"* ]] || \
+     [[ "$command_str" == *"install.sh"* ]]; then
+  category="sandshell"
+elif [[ "$command_str" =~ ^(ls|pwd|cat|head|tail|wc|find|grep|which|echo|printf|date|whoami|rg)($|[[:space:]]) ]]; then
   category="read_only"
 else
   category="unclassified"
