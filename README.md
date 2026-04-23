@@ -15,6 +15,25 @@ Codex CLI, Gemini CLI, and Amp are secondary instruction paths in this
 release. sandshell can install guidance for them, but the setup, hook, and
 verification path is Claude-specific.
 
+## Claude vs Codex
+
+Claude Code and Codex CLI have different safety models.
+
+- Claude Code exposes configurable settings, permission rules, and native hook
+  points. sandshell uses those surfaces to configure a native sandbox, add a
+  Bash guard, and record an audit trail.
+- Codex CLI exposes approval modes, including a built-in `--full-auto` mode
+  documented as sandboxed, network-disabled, and scoped to the current
+  directory. sandshell does not currently have the same native policy and hook
+  surface to integrate with there.
+
+In practice:
+
+- Claude Code is the first-class sandshell path for configurable policy and
+  audit hooks.
+- Codex CLI support focuses on safe defaults, launch guidance, and installed
+  instruction files rather than hook-level parity.
+
 ## Canonical install
 
 ```bash
