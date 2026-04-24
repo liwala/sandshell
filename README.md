@@ -2,6 +2,51 @@
 
 Defense-in-depth for AI coding agents.
 
+sandshell adds three layers of defense, with the native sandbox as the main
+security boundary:
+
+1. Native OS sandbox
+2. Bash guard + audit hooks
+3. Optional prompt-injection scanning
+
+## What It Does
+
+### 1. Native OS sandbox
+
+Uses Claude Code's built-in sandbox backed by Seatbelt on macOS or bubblewrap
+on Linux.
+
+- Writes restricted to the project directory
+- Network limited to the selected profile
+- `--dangerouslyDisableSandbox` denied in Claude settings
+- Optional `--strict` mode blocks reads to sensitive paths
+
+This is the primary security boundary in `0.1.0`, and the rest of the release
+is built around it.
+
+### 2. Claude Bash guard + audit hooks
+
+Claude `PreToolUse` and `PostToolUse` hooks add two host-side controls:
+
+- The pre-hook blocks obvious sandbox-disabling Bash commands
+- The post-hook logs Bash commands to `~/.sandshell/audit/<session>.jsonl`
+
+The hooks are intentionally narrow. They are there to catch obvious attempts to
+weaken protections and to leave a trail, not to replace the native sandbox with
+a general command policy engine.
+
+### 3. Optional prompt-injection scanning
+
+If [Pipelock](https://github.com/luckyPipewrench/pipelock) is installed,
+sandshell detects it and can instruct the agent to handle fetched content more
+cautiously.
+
+```bash
+~/sandshell/scripts/install.sh pipelock
+```
+
+## Current release scope
+
 `0.1.0` is a Claude Code-first release built around the parts we can state
 clearly and support directly:
 
@@ -14,25 +59,6 @@ clearly and support directly:
 Codex CLI, Gemini CLI, and Amp are secondary instruction paths in this
 release. sandshell can install guidance for them, but the setup, hook, and
 verification path is Claude-specific.
-
-## Claude vs Codex
-
-Claude Code and Codex CLI have different safety models.
-
-- Claude Code exposes configurable settings, permission rules, and native hook
-  points. sandshell uses those surfaces to configure a native sandbox, add a
-  Bash guard, and record an audit trail.
-- Codex CLI exposes approval modes, including a built-in `--full-auto` mode
-  documented as sandboxed, network-disabled, and scoped to the current
-  directory. sandshell does not currently have the same native policy and hook
-  surface to integrate with there.
-
-In practice:
-
-- Claude Code is the first-class sandshell path for configurable policy and
-  audit hooks.
-- Codex CLI support focuses on safe defaults, launch guidance, and installed
-  instruction files rather than hook-level parity.
 
 ## Canonical install
 
@@ -68,44 +94,24 @@ Current release: `0.1.0`
 - Security model: [SECURITY.md](SECURITY.md)
 - Maintainer smoke test: `bash scripts/release-check.sh`
 
-## What It Does
+## Claude vs Codex
 
-sandshell has three layers, with the native sandbox as the main security
-boundary:
+Claude Code and Codex CLI have different safety models.
 
-### 1. Native OS sandbox
+- Claude Code exposes configurable settings, permission rules, and native hook
+  points. sandshell uses those surfaces to configure a native sandbox, add a
+  Bash guard, and record an audit trail.
+- Codex CLI exposes approval modes, including a built-in `--full-auto` mode
+  documented as sandboxed, network-disabled, and scoped to the current
+  directory. sandshell does not currently have the same native policy and hook
+  surface to integrate with there.
 
-Uses Claude Code's built-in sandbox backed by Seatbelt on macOS or bubblewrap
-on Linux.
+In practice:
 
-- Writes restricted to the project directory
-- Network limited to the selected profile
-- `--dangerouslyDisableSandbox` denied in Claude settings
-- Optional `--strict` mode blocks reads to sensitive paths
-
-This is the primary security boundary in `0.1.0`, and the rest of the release
-is built around it.
-
-### 2. Claude Bash guard + audit hooks
-
-Claude `PreToolUse` and `PostToolUse` hooks add two host-side controls:
-
-- The pre-hook blocks obvious sandbox-disabling Bash commands
-- The post-hook logs Bash commands to `~/.sandshell/audit/<session>.jsonl`
-
-The hooks are intentionally narrow. They are there to catch obvious attempts to
-weaken protections and to leave a trail, not to replace the native sandbox with
-a general command policy engine.
-
-### 3. Optional prompt-injection scanning
-
-If [Pipelock](https://github.com/luckyPipewrench/pipelock) is installed,
-sandshell detects it and can instruct the agent to handle fetched content more
-cautiously.
-
-```bash
-~/sandshell/scripts/install.sh pipelock
-```
+- Claude Code is the first-class sandshell path for configurable policy and
+  audit hooks.
+- Codex CLI support focuses on safe defaults, launch guidance, and installed
+  instruction files rather than hook-level parity.
 
 ## Setup
 
