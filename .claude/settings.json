@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "deny": [
+      "Bash(dangerouslyDisableSandbox:true)"
+    ]
+  },
+  "sandbox": {
+    "enabled": true,
+    "filesystem": {
+      "write": {
+        "allowOnly": [
+          ".",
+          "$TMPDIR"
+        ],
+        "denyWithinAllow": []
+      },
+      "read": {
+        "denyOnly": [],
+        "allowWithinDeny": []
+      }
+    },
+    "network": {
+      "allowedHosts": []
+    }
+  },
+  "sandshell_managed": true
+}

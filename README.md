@@ -43,12 +43,16 @@ git clone https://github.com/anthropics/sandshell ~/sandshell
 # Install the Claude Code skill
 ~/sandshell/scripts/install-agent.sh claude
 
-# Configure native sandbox + Bash hooks
+# Configure native sandbox + Bash hooks for your user-level Claude setup
 ~/sandshell/scripts/setup.sh personal --profile=default
 
 # Verify what is active
 ~/sandshell/scripts/detect.sh
 ```
+
+Here, `personal` means "write sandshell's Claude settings to your user-level
+Claude config" so the setup applies across projects. Use `project` instead to
+write repo-local settings in `.claude/settings.json` for just the current repo.
 
 To roll back later:
 
@@ -110,6 +114,9 @@ cautiously.
 ```bash
 ~/.claude/skills/sandshell/scripts/setup.sh personal --profile=default
 ```
+
+`personal` writes to `~/.claude/settings.json`. `project` writes to
+`.claude/settings.json` in the current repository.
 
 This configures:
 
