@@ -1,8 +1,9 @@
 ---
 name: sandshell
 description: >
-  Defense-in-depth for coding agents. Focuses on Claude Code native sandbox
-  configuration, Bash guard hooks, and audit logging.
+  Defense-in-depth for coding agents. Claude Code adapter for the sandshell
+  core policy, with native sandbox configuration, Bash guard hooks, and audit
+  logging.
 ---
 
 # sandshell

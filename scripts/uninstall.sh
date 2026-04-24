@@ -11,7 +11,8 @@ usage() {
   echo "  personal               Remove from ~/.claude/settings.json (default)"
   echo "  project                Remove from .claude/settings.json"
   echo "  --remove-agent-installs  Also remove installed Claude/Codex skills and"
-  echo "                           sandshell sections from GEMINI.md / AGENTS.md"
+  echo "                           generic sandshell files or sections from"
+  echo "                           GEMINI.md / AGENTS.md"
   exit 0
 }
 
@@ -53,6 +54,7 @@ case "$SCOPE" in
     SETTINGS_FILE="$SETTINGS_DIR/settings.json"
     CLAUDE_SKILL_DIR="$HOME/.claude/skills/sandshell"
     CODEX_SKILL_DIR="$HOME/.codex/skills/sandshell"
+    GENERIC_FILE="$HOME/.sandshell/SANDSHELL.md"
     GEMINI_FILE="$HOME/.gemini/GEMINI.md"
     ;;
   project)
@@ -60,6 +62,7 @@ case "$SCOPE" in
     SETTINGS_FILE="$SETTINGS_DIR/settings.json"
     CLAUDE_SKILL_DIR=".claude/skills/sandshell"
     CODEX_SKILL_DIR=".codex/skills/sandshell"
+    GENERIC_FILE="SANDSHELL.md"
     GEMINI_FILE="GEMINI.md"
     ;;
 esac
@@ -89,6 +92,7 @@ fi
 
 if [[ "$REMOVE_AGENT_INSTALLS" = true ]]; then
   rm -rf "$CLAUDE_SKILL_DIR" "$CODEX_SKILL_DIR"
+  rm -f "$GENERIC_FILE"
   strip_marked_section "$GEMINI_FILE"
   strip_marked_section "$AMP_FILE"
   echo "Removed sandshell-installed agent instructions for scope: $SCOPE"

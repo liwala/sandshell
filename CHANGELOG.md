@@ -10,6 +10,9 @@ All notable changes to this project should be documented in this file.
 - Removed the container runtime path from supported docs, scripts, tests, and CI.
 - Fixed `hook-post-bash.sh` so Bash command logging no longer fails on startup.
 - Narrowed `hook-pre-bash.sh` so it blocks obvious sandbox-disable attempts without blocking normal build and test commands.
+- Split sandshell instructions into an agent-agnostic core plus Claude, Codex, and generic adapters.
+- Added a `generic` install target that writes `SANDSHELL.md` for unsupported coding agents.
+- Stopped generating Codex instructions that tell Codex users to run Claude-only setup commands.
 
 ## 0.1.0 - 2026-04-10
 

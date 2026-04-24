@@ -5,7 +5,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SANDSHELL_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 AGENTS_DIR="$SANDSHELL_DIR/agents"
-TEMPLATE="$AGENTS_DIR/SANDSHELL.md"
+CORE_TEMPLATE="$AGENTS_DIR/SANDSHELL.md"
+CODEX_TEMPLATE="$AGENTS_DIR/CODEX.md"
+GENERIC_TEMPLATE="$AGENTS_DIR/GENERIC.md"
 
 usage() {
   echo "Usage: install-agent.sh <agent> [personal|project]"
@@ -15,6 +17,7 @@ usage() {
   echo "Agents:"
   echo "  claude    Claude Code — installs SKILL.md to .claude/skills/sandshell/"
   echo "  codex     OpenAI Codex CLI — installs SKILL.md to .codex/skills/sandshell/"
+  echo "  generic   Writes SANDSHELL.md for unsupported agents"
   echo "  gemini    Gemini CLI — appends to GEMINI.md"
   echo "  amp       Amp (Sourcegraph) — appends to AGENTS.md"
   echo "  all       Install for all supported agents"
@@ -25,10 +28,55 @@ usage() {
   exit 0
 }
 
-# Generate agent-specific instructions by replacing placeholders
+# Generate agent-specific instructions by replacing placeholders.
 render_template() {
-  local sandshell_path="$1"
-  sed "s|__SANDSHELL_DIR__|${sandshell_path}|g" "$TEMPLATE"
+  local template="$1"
+  local path="$2"
+  sed "s|__SANDSHELL_DIR__|${path}|g" "$template"
+}
+
+write_skill_header() {
+  local target_file="$1"
+  local description="$2"
+  cat > "$target_file" <<HEADER
+---
+name: sandshell
+description: >
+  $description
+---
+
+HEADER
+}
+
+append_templates() {
+  local target_file="$1"
+  local sandshell_path="$2"
+  shift 2
+
+  for template in "$@"; do
+    render_template "$template" "$sandshell_path" >> "$target_file"
+    printf '\n' >> "$target_file"
+  done
+}
+
+append_marked_templates() {
+  local target_file="$1"
+  local sandshell_path="$2"
+  shift 2
+
+  if [[ -f "$target_file" ]]; then
+    echo "" >> "$target_file"
+    echo "<!-- sandshell: begin -->" >> "$target_file"
+  else
+    echo "<!-- sandshell: begin -->" > "$target_file"
+  fi
+
+  for template in "$@"; do
+    render_template "$template" "$sandshell_path" >> "$target_file"
+    printf '\n' >> "$target_file"
+  done
+
+  echo "<!-- sandshell: end -->" >> "$target_file"
 }
 
 install_claude() {
@@ -77,21 +125,15 @@ install_codex() {
 
   mkdir -p "$target_dir"
 
-  # Codex uses SKILL.md but without bang-blocks or ${CLAUDE_SKILL_DIR}
   local sandshell_path="$SANDSHELL_DIR"
   [[ "$scope" = "project" ]] && sandshell_path=".codex/skills/sandshell"
 
-  cat > "$target_dir/SKILL.md" <<HEADER
----
-name: sandshell
-description: >
-  Defense-in-depth for coding agents. Focuses on Claude native sandboxing,
-  Bash hooks, and audit logging.
----
-
-HEADER
-
-  render_template "$sandshell_path" >> "$target_dir/SKILL.md"
+  write_skill_header \
+    "$target_dir/SKILL.md" \
+    "Defense-in-depth for coding agents. Codex CLI adapter with native approval-mode guidance plus optional sandshell audit helpers."
+  append_templates "$target_dir/SKILL.md" "$sandshell_path" \
+    "$CORE_TEMPLATE" \
+    "$CODEX_TEMPLATE"
 
   # Symlink scripts
   ln -sf "$SANDSHELL_DIR/scripts" "$target_dir/scripts" 2>/dev/null || \
@@ -100,7 +142,29 @@ HEADER
     cp -r "$SANDSHELL_DIR/profiles" "$target_dir/profiles"
 
   echo "Codex CLI: installed to $target_dir"
-  echo "  Note: this installs the sandshell skill only; setup.sh/setup-hooks.sh configure Claude Code settings, not Codex"
+  echo "  Note: this installs Codex-native guidance only; setup.sh/setup-hooks.sh still configure Claude Code settings, not Codex"
+}
+
+install_generic() {
+  local scope="${1:-project}"
+  local target_file
+  local sandshell_path="$SANDSHELL_DIR"
+
+  case "$scope" in
+    personal) target_file="$HOME/.sandshell/SANDSHELL.md" ;;
+    project)  target_file="SANDSHELL.md" ;;
+  esac
+
+  [[ "$scope" = "project" ]] && sandshell_path="."
+  mkdir -p "$(dirname "$target_file")"
+
+  : > "$target_file"
+  append_templates "$target_file" "$sandshell_path" \
+    "$CORE_TEMPLATE" \
+    "$GENERIC_TEMPLATE"
+
+  echo "Generic agent instructions: wrote $target_file"
+  echo "  Use this file as repo guidance for unsupported agents."
 }
 
 install_gemini() {
@@ -120,18 +184,8 @@ install_gemini() {
     return 0
   fi
 
-  # Append to existing or create new
   mkdir -p "$(dirname "$target_file")"
-
-  if [[ -f "$target_file" ]]; then
-    echo "" >> "$target_file"
-    echo "<!-- sandshell: begin -->" >> "$target_file"
-  else
-    echo "<!-- sandshell: begin -->" > "$target_file"
-  fi
-
-  render_template "$sandshell_path" >> "$target_file"
-  echo "<!-- sandshell: end -->" >> "$target_file"
+  append_marked_templates "$target_file" "$sandshell_path" "$CORE_TEMPLATE"
 
   echo "Gemini CLI: appended sandshell instructions to $target_file"
   echo "  Note: Gemini CLI has no hooks — audit trail relies on script-level logging"
@@ -154,16 +208,7 @@ install_amp() {
     return 0
   fi
 
-  # Append to existing or create new
-  if [[ -f "$target_file" ]]; then
-    echo "" >> "$target_file"
-    echo "<!-- sandshell: begin -->" >> "$target_file"
-  else
-    echo "<!-- sandshell: begin -->" > "$target_file"
-  fi
-
-  render_template "$sandshell_path" >> "$target_file"
-  echo "<!-- sandshell: end -->" >> "$target_file"
+  append_marked_templates "$target_file" "$sandshell_path" "$CORE_TEMPLATE"
 
   echo "Amp: appended sandshell instructions to $target_file"
   echo "  Note: Amp has no hooks or skill system — instructions are advisory"
@@ -192,13 +237,14 @@ SCOPE="${2:-personal}"
 case "$AGENT" in
   claude)  install_claude "$SCOPE" ;;
   codex)   install_codex "$SCOPE" ;;
+  generic) install_generic "$SCOPE" ;;
   gemini)  install_gemini "$SCOPE" ;;
   amp)     install_amp "$SCOPE" ;;
   all)     install_all "$SCOPE" ;;
   --help|-h|help) usage ;;
   *)
     echo "Unknown agent: $AGENT" >&2
-    echo "Supported: claude, codex, gemini, amp, all" >&2
+    echo "Supported: claude, codex, generic, gemini, amp, all" >&2
     exit 1
     ;;
 esac

@@ -4,7 +4,11 @@ Pure bash + markdown project. No build system, no compiled language.
 
 ## Structure
 
-- `SKILL.md` — Claude/Codex skill definition
+- `SKILL.md` — Claude Code skill
+- `agents/`
+  - `SANDSHELL.md` — agent-agnostic sandshell core guidance
+  - `CODEX.md` — Codex CLI adapter
+  - `GENERIC.md` — fallback adapter for unsupported agents
 - `scripts/`
   - `detect.sh` — sandbox + hooks + pipelock detection
   - `setup.sh` — one-command Claude setup
@@ -50,8 +54,9 @@ CI mirrors this in `.github/workflows/ci.yml`.
 
 ## Architecture
 
-The release path is intentionally narrow:
+The support model is split between a core policy and agent adapters:
 
 1. Native Claude sandbox for filesystem/network enforcement
 2. Claude Bash guard + audit hooks for light host-side control and observability
 3. Optional Pipelock detection for fetched content hygiene
+4. Codex and generic adapters that lean on each agent's own native controls

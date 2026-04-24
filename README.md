@@ -11,10 +11,14 @@ security boundary:
 
 ## What It Does
 
+These layers are exposed differently by different agents. In `0.1.0`, Claude
+Code gets the full sandshell-managed setup path; Codex and other agents get
+agent-specific or generic guidance that leans on their own native controls.
+
 ### 1. Native OS sandbox
 
-Uses Claude Code's built-in sandbox backed by Seatbelt on macOS or bubblewrap
-on Linux.
+On Claude Code, sandshell uses Claude Code's built-in sandbox backed by
+Seatbelt on macOS or bubblewrap on Linux.
 
 - Writes restricted to the project directory
 - Network limited to the selected profile
@@ -47,20 +51,19 @@ cautiously.
 
 ## Current release scope
 
-`0.1.0` is a Claude Code-first release built around the parts we can state
-clearly and support directly:
+`0.1.0` ships an agent-agnostic sandshell core plus agent-specific adapters.
+The full setup and verification path is still Claude-specific, but Codex and
+other agents no longer receive Claude-shaped instructions.
 
-- Claude Code
-- macOS or Linux
-- Native Claude sandbox configuration via `scripts/setup-sandbox.sh`
-- Claude Bash guard + audit hooks via `scripts/setup-hooks.sh`
-- Optional prompt-injection scanning via Pipelock
+| Agent | sandshell path | Enforcement model |
+|-------|----------------|-------------------|
+| Claude Code | Native sandbox setup, hooks, audit trail, Claude skill | sandshell-managed Claude settings and hooks |
+| Codex CLI | Codex-specific skill | Codex native approval and sandbox modes |
+| Gemini CLI | Generic sandshell guidance appended to `GEMINI.md` | Gemini-native controls, if any |
+| Amp | Generic sandshell guidance appended to `AGENTS.md` | Amp-native controls, if any |
+| Other agents | Generic `SANDSHELL.md` guidance via `install-agent.sh generic` | Agent-native controls if available; otherwise advisory |
 
-Codex CLI, Gemini CLI, and Amp are secondary instruction paths in this
-release. sandshell can install guidance for them, but the setup, hook, and
-verification path is Claude-specific.
-
-## Canonical install
+## Canonical Claude install
 
 ```bash
 # Clone the repo
@@ -110,10 +113,10 @@ In practice:
 
 - Claude Code is the first-class sandshell path for configurable policy and
   audit hooks.
-- Codex CLI support focuses on safe defaults, launch guidance, and installed
-  instruction files rather than hook-level parity.
+- Codex CLI support uses a Codex-specific skill that points users toward
+  Codex's native approval and sandbox modes rather than Claude setup scripts.
 
-## Setup
+## Claude setup
 
 ### One command
 
@@ -216,14 +219,16 @@ GitHub Actions runs the same release check on pushes and pull requests.
 - `bash`
 - `jq` for setup/hooks/uninstall
 - Python 3 for audit helpers
-- Claude Code with Bash `PreToolUse` / `PostToolUse` hook support
+- Claude Code with Bash `PreToolUse` / `PostToolUse` hook support for the full
+  sandshell-managed path
 
-## Secondary Agent Installs
+## Other Agent Installs
 
 ```bash
 ~/sandshell/scripts/install-agent.sh codex
 ~/sandshell/scripts/install-agent.sh gemini
 ~/sandshell/scripts/install-agent.sh amp
+~/sandshell/scripts/install-agent.sh generic project
 ~/sandshell/scripts/install-agent.sh all
 ```
 

@@ -76,6 +76,10 @@ remove me
 after
 EOF
 
+cat > "$TMPDIR_TEST/project/SANDSHELL.md" <<'EOF'
+generated
+EOF
+
 (
   cd "$TMPDIR_TEST/project"
   "$ROOT/scripts/uninstall.sh" project --remove-agent-installs >/dev/null
@@ -90,6 +94,7 @@ assert_json_value "$SETTINGS_FILE" "permissions.deny.0" "OtherRule"
 assert_json_value "$SETTINGS_FILE" "hooks.PostToolUse.0.matcher" "Write"
 assert_not_exists "$TMPDIR_TEST/project/.claude/skills/sandshell"
 assert_not_exists "$TMPDIR_TEST/project/.codex/skills/sandshell"
+assert_not_exists "$TMPDIR_TEST/project/SANDSHELL.md"
 assert_file_not_contains "$TMPDIR_TEST/project/GEMINI.md" "remove me"
 assert_file_not_contains "$TMPDIR_TEST/project/AGENTS.md" "remove me"
 
