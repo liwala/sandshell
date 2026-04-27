@@ -64,7 +64,7 @@ other agents no longer receive Claude-shaped instructions.
 
 ```bash
 # Clone the repo
-git clone https://github.com/anthropics/sandshell ~/sandshell
+git clone https://github.com/liwala/sandshell ~/sandshell
 
 # Install the Claude Code skill
 ~/sandshell/scripts/install-agent.sh claude
