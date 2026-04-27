@@ -13,6 +13,7 @@ All notable changes to this project should be documented in this file.
 - Split sandshell instructions into an agent-agnostic core plus Claude, Codex, and generic adapters.
 - Added a `generic` install target that writes `SANDSHELL.md` for unsupported coding agents.
 - Stopped generating Codex instructions that tell Codex users to run Claude-only setup commands.
+- Reframed Layer 3 as behavioral guidance for fetched content rather than a Pipelock integration. Removed `scripts/install.sh`, the `pipelock_available` detect signal, and Pipelock-specific docs across README, SKILL.md, SECURITY.md, and PLAN.md.
 
 ## 0.1.0 - 2026-04-10
 

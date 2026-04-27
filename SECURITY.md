@@ -10,7 +10,6 @@ and the assumptions behind the first release.
 - Claude Code on macOS or Linux
 - Native Claude sandbox configured by `scripts/setup-sandbox.sh`
 - Claude Bash hooks configured by `scripts/setup-hooks.sh`
-- Optional Pipelock detection
 - Codex CLI, Gemini CLI, Amp, and other agents via installed sandshell
   instructions that lean on each agent's own native controls
 
@@ -37,7 +36,7 @@ has a comparable enforcement surface.
 - Claude `PreToolUse` Bash guard for obvious sandbox-disabling attempts
 - Claude `PostToolUse` Bash logging
 - Agent self-reporting of notable host-vs-sandbox decisions
-- Pipelock-based prompt-injection scanning
+- Skill-level guidance to treat fetched content as untrusted input
 - Generic sandshell guidance for Codex, Gemini, Amp, and other agents
 
 ## Important limitations
@@ -50,7 +49,9 @@ has a comparable enforcement surface.
   protection-weakening commands, not to act as a complete command policy engine.
 - The audit trail helps with observability and review; it does not turn an
   advisory workflow into a hard boundary.
-- Pipelock is optional and content scanning is best-effort.
+- sandshell does not ship a content scanner. Fetched-content hygiene is
+  behavioral guidance to the agent; Layers 1 and 2 are what contains the
+  consequences if a prompt-injection attempt slips through.
 
 ## Reporting
 

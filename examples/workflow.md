@@ -14,14 +14,12 @@ native_sandbox=seatbelt
 cc_sandbox_configured=true
 audit_hooks_configured=true
 bash_guard_configured=true
-pipelock_available=false
 ```
 
 This means:
 
 - Claude's native sandbox is configured
 - Bash guard and audit hooks are active
-- Optional prompt-injection scanning is not installed
 
 ## 2. Normal work
 

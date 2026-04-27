@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# sandshell: detect Claude sandbox and optional tooling status
+# sandshell: detect Claude sandbox and hook configuration
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -84,14 +84,4 @@ elif [[ -f ".claude/settings.json" ]] && grep -q "hook-pre-bash.sh" ".claude/set
   echo "bash_guard_configured=true"
 else
   echo "bash_guard_configured=false"
-fi
-
-# Optional: Pipelock (prompt injection scanning)
-if command -v pipelock >/dev/null 2>&1; then
-  echo "pipelock_available=true"
-  echo "pipelock_version=$(pipelock version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+[.0-9]*' || echo 'unknown')"
-else
-  echo "pipelock_available=false"
-  echo "# Optional: Install Pipelock for prompt injection scanning"
-  echo "# brew install luckyPipewrench/tap/pipelock"
 fi

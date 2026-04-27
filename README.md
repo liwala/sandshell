@@ -7,7 +7,7 @@ security boundary:
 
 1. Native OS sandbox
 2. Bash guard + audit hooks
-3. Optional prompt-injection scanning
+3. Behavioral guidance for fetched content
 
 ## What It Does
 
@@ -39,15 +39,12 @@ The hooks are intentionally narrow. They are there to catch obvious attempts to
 weaken protections and to leave a trail, not to replace the native sandbox with
 a general command policy engine.
 
-### 3. Optional prompt-injection scanning
+### 3. Behavioral guidance for fetched content
 
-If [Pipelock](https://github.com/luckyPipewrench/pipelock) is installed,
-sandshell detects it and can instruct the agent to handle fetched content more
-cautiously.
-
-```bash
-~/sandshell/scripts/install.sh pipelock
-```
+The skill instructs the agent to treat content fetched from the web, issues,
+READMEs, and similar sources as untrusted input, and to surface suspicious
+instructions to the user before acting on them. This is behavioral, not a
+scanner — the native sandbox and Bash guard remain the real boundary.
 
 ## Current release scope
 
@@ -131,7 +128,6 @@ This configures:
 
 1. Native OS sandbox
 2. Claude Bash guard + audit hooks
-3. Optional Pipelock detection
 
 ### Individual components
 
@@ -141,9 +137,6 @@ setup-sandbox.sh personal --profile=node --strict
 
 # Just the guard + audit hooks
 setup-hooks.sh personal
-
-# Optional prompt-injection scanner
-install.sh pipelock
 ```
 
 ### Project-level setup
@@ -201,7 +194,7 @@ The audit trail combines:
 | Threat | Why not |
 |--------|---------|
 | Full behavioral containment of the agent | sandshell is not an external orchestrator or separate runtime boundary |
-| All prompt injection | Pipelock is optional and content scanning is best-effort |
+| Prompt injection | Layer 3 is behavioral guidance only; sandshell relies on Layers 1 and 2 to contain consequences when fetched content turns hostile |
 | Non-Claude agent parity | Secondary agents do not get the same native hook/config path |
 
 ## Testing

@@ -11,7 +11,6 @@ usage() {
   echo ""
   echo "  1. Claude Code native sandbox (OS-enforced filesystem + network restrictions)"
   echo "  2. Claude Code Bash guard + audit hooks"
-  echo "  3. Checks for Pipelock (optional prompt injection scanning)"
   echo ""
   echo "Options:"
   echo "  personal         Install to ~/.claude/settings.json (default)"
@@ -65,16 +64,6 @@ else
   echo ""
 fi
 
-# Step 3: Check Pipelock
-echo "--- Layer 3: Prompt injection scanning ---"
-if command -v pipelock >/dev/null 2>&1; then
-  echo "Pipelock detected. Web content scanning available."
-else
-  echo "Pipelock not installed (optional)."
-  echo "  $SCRIPT_DIR/install.sh pipelock"
-fi
-echo ""
-
 # Summary
 echo "==============="
 echo "Setup complete!"
@@ -82,8 +71,6 @@ echo ""
 echo "Protection layers active:"
 [[ "$SKIP_SANDBOX" = false ]] && echo "  [x] Native OS sandbox (kernel-enforced)"
 [[ "$SKIP_HOOKS" = false ]]   && echo "  [x] Audit hooks (all Bash commands logged)"
-command -v pipelock >/dev/null 2>&1 && echo "  [x] Pipelock (prompt injection scanning)"
-command -v pipelock >/dev/null 2>&1 || echo "  [ ] Pipelock (optional, not installed)"
 echo ""
 echo "Verify the sandbox is enforcing. In a Claude Code session run:"
 echo "  echo test > \"\$HOME/sandshell-probe.txt\"   # should be Operation not permitted"

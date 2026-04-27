@@ -10,7 +10,7 @@ Pure bash + markdown project. No build system, no compiled language.
   - `CODEX.md` — Codex CLI adapter
   - `GENERIC.md` — fallback adapter for unsupported agents
 - `scripts/`
-  - `detect.sh` — sandbox + hooks + pipelock detection
+  - `detect.sh` — sandbox + hooks detection
   - `setup.sh` — one-command Claude setup
   - `setup-sandbox.sh` — configure Claude native sandbox
   - `setup-hooks.sh` — configure Claude Bash guard + audit hooks
@@ -19,7 +19,6 @@ Pure bash + markdown project. No build system, no compiled language.
   - `audit.sh` — JSONL audit trail
   - `hook-pre-bash.sh` — narrow PreToolUse guard
   - `hook-post-bash.sh` — PostToolUse Bash logger
-  - `install.sh` — optional Pipelock installer
 - `profiles/` — native sandbox network allowlists
 - `examples/` — usage examples
 
@@ -58,5 +57,5 @@ The support model is split between a core policy and agent adapters:
 
 1. Native Claude sandbox for filesystem/network enforcement
 2. Claude Bash guard + audit hooks for light host-side control and observability
-3. Optional Pipelock detection for fetched content hygiene
+3. Behavioral guidance to treat fetched content as untrusted input
 4. Codex and generic adapters that lean on each agent's own native controls

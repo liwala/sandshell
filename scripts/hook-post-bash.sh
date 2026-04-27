@@ -41,8 +41,7 @@ elif [[ "$command_str" =~ ^gh\ (pr|issue|repo|release) ]]; then
   category="github_cli"
 elif [[ "$command_str" == *"setup.sh"* ]] || [[ "$command_str" == *"setup-sandbox.sh"* ]] || \
      [[ "$command_str" == *"setup-hooks.sh"* ]] || [[ "$command_str" == *"uninstall.sh"* ]] || \
-     [[ "$command_str" == *"detect.sh"* ]] || [[ "$command_str" == *"install-agent.sh"* ]] || \
-     [[ "$command_str" == *"install.sh"* ]]; then
+     [[ "$command_str" == *"detect.sh"* ]] || [[ "$command_str" == *"install-agent.sh"* ]]; then
   category="sandshell"
 elif [[ "$command_str" =~ ^(ls|pwd|cat|head|tail|wc|find|grep|which|echo|printf|date|whoami|rg)($|[[:space:]]) ]]; then
   category="read_only"
