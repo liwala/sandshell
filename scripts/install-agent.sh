@@ -113,7 +113,7 @@ install_claude() {
     echo "Claude Code: installed to $target_dir"
   fi
 
-  echo "  Run: $SANDSHELL_DIR/scripts/setup.sh $scope"
+  echo "  Next: sandshell apply claude $scope"
 }
 
 install_codex() {
@@ -144,7 +144,7 @@ install_codex() {
     cp -r "$SANDSHELL_DIR/profiles" "$target_dir/profiles"
 
   echo "Codex CLI: installed to $target_dir"
-  echo "  Note: this installs Codex-native guidance only; setup.sh/setup-hooks.sh still configure Claude Code settings, not Codex"
+  echo "  Next: sandshell apply codex"
 }
 
 install_generic() {
@@ -190,7 +190,7 @@ install_gemini() {
   append_marked_templates "$target_file" "$sandshell_path" "$CORE_TEMPLATE"
 
   echo "Gemini CLI: appended sandshell instructions to $target_file"
-  echo "  Note: Gemini CLI has no hooks — audit trail relies on script-level logging"
+  echo "  Next: sandshell apply gemini $scope"
 }
 
 install_amp() {
