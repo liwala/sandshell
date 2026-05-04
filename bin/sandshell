@@ -33,6 +33,10 @@ Verbs:
                    sandshell apply codex                    # Codex only
                    sandshell apply gemini [user|project]    # Gemini only
                  Legacy scope names accepted: 'personal' (= 'user'), 'workspace' (= 'project').
+  uninstall      Remove sandshell-managed configs across detected agents.
+                   sandshell uninstall                # default user scope
+                   sandshell uninstall project        # remove project-scope configs
+                   sandshell uninstall user --remove-agent-installs   # also remove skills/instruction docs
 
 Options:
   -h, --help     Show this message
@@ -64,6 +68,9 @@ case "$verb" in
     ;;
   install-agent)
     exec "$SCRIPTS_DIR/install-agent.sh" "$@"
+    ;;
+  uninstall)
+    exec "$SCRIPTS_DIR/uninstall.sh" "$@"
     ;;
   apply)
     # apply <agent> dispatches to that agent's setup script.

@@ -129,4 +129,4 @@ echo "  - Classifies commands (git, github_cli, sandshell, read_only, unclassifi
 echo "  - Skips direct audit-trail.sh self-logging"
 echo "  - Writes to ~/.sandshell/audit/<session>.jsonl"
 echo ""
-echo "To remove, edit $SETTINGS_FILE and delete the sandshell PreToolUse/PostToolUse entries."
+echo "To remove: sandshell uninstall [user|project]"
