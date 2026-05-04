@@ -79,5 +79,6 @@ If hooks are configured, normal Bash logging is automatic.
 | Full safety review             | `sandshell audit`                                             |
 | Verify (CI: exit 2 on issues)  | `sandshell verify`                                            |
 | Apply safe defaults to Claude  | `sandshell apply [user\|project] [--profile=X] [--strict]` |
-| Inspect audit trail            | `audit-trail.sh show <session-id>`                            |
-| Audit-trail summary            | `audit-trail.sh summary <session-id>`                         |
+| List audit-trail sessions      | `sandshell trail list`                                        |
+| Inspect a session              | `sandshell trail show <session-id>`                           |
+| Session summary                | `sandshell trail summary <session-id>`                        |
