@@ -90,3 +90,7 @@ echo "kernel level, verified empirically.)"
 echo ""
 echo "Run 'sandshell audit' for the full per-finding view, or 'sandshell audit"
 echo "--summary' for a one-line-per-agent rollup."
+
+# Refresh the drift baseline so the next 'sandshell audit' compares against
+# this post-apply state. Silent on success; warnings (if any) go to stderr.
+"$SCRIPT_DIR/audit-config.sh" --snapshot --no-drift --json >/dev/null 2>&1 || true

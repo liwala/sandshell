@@ -4,41 +4,31 @@ Safe defaults for AI coding agents — across agents, in one command.
 
 Sandshell audits the safety configs of the coding agents you have installed
 (Claude Code, Codex CLI, Gemini CLI), reports what's risky, and applies safe
-defaults for the ones that support them. It's the executable companion to
-the threat-model decisions you'd otherwise make by hand for each agent.
+defaults to each. It's the executable companion to the threat-model
+decisions you'd otherwise make by hand for each agent.
 
-## Why not just use the agent's permission prompts?
-
-Coding agents already prompt before running commands — Claude Code does, Codex
-does, every agent does. So why add another layer? Permission systems share
-three structural limits:
-
-- **They're per-agent.** Claude's system, Codex's modes, Gemini's
-  confirmations — different UIs, different defaults, different bypasses. A
-  user switching agents loses any safety habit. Sandshell is one taxonomy
-  across all of them.
-- **They classify by syscall, not intent.** They can't tell "fresh clone of
-  an unknown repo" from "edit in your own repo." Sandshell uses provenance,
-  command shape, and context — the things that *make* something risky.
-- **They prompt on every action.** A wall that fires on everything is a wall
-  users learn to walk through. A wall that fires only when it matters is a
-  wall users read.
-
-Sandshell sits one level up from the permission prompt: it triages the *risk
-tier* of your current configuration and tells you which settings are unsafe,
-which are missing, and what to do about each.
+**Sandshell is not a runtime sandbox.** It configures the sandbox primitives
+your agent already has (Claude Code's native sandbox, Codex's Seatbelt
+policy, Gemini's `tools.sandbox`) and tracks how those configs change over
+time. For *runtime* isolation of unvetted code, reach for a microVM tool
+like Docker `sbx`. Sandshell is the layer below that — making sure the
+sandbox you do have is turned on, narrow, and stays that way.
 
 ## Verbs
 
-| Verb     | What it does                                                                              |
-|----------|-------------------------------------------------------------------------------------------|
-| `detect` | Report host **inventory**: OS, dependencies, native sandbox primitive, agents installed   |
-| `audit`  | Report **safety findings** by severity. `--summary` for per-agent rollup, `--json` for machine-readable |
-| `apply`  | Apply safe defaults to detected agents (Claude Code today)                                |
-| `verify` | Re-run audit; exit 2 on findings ≥ medium (for CI / pre-commit)                          |
+| Verb            | What it does                                                                                          |
+|-----------------|-------------------------------------------------------------------------------------------------------|
+| `detect`        | Report host **inventory**: OS, dependencies, native sandbox primitive, agents installed              |
+| `audit`         | Report **safety findings** by severity. `--summary` for per-agent rollup, `--json` for machine-readable |
+| `install-agent` | Install sandshell skill / instruction docs into detected agents. One-time, idempotent                |
+| `apply`         | Write safe-default configs to detected agents (Claude Code, Codex CLI, Gemini CLI)                   |
+| `drift`         | Show what changed since the last apply / snapshot                                                    |
+| `verify`        | Re-run audit; exit 2 on findings ≥ medium (for CI / pre-commit)                                      |
 
-`detect` answers *"what do I have?"*; `audit` answers *"is it safe?"*. Use both
-together — `detect` once at install, `audit` whenever you want a safety review.
+`detect` answers *"what do I have?"*; `audit` answers *"is it safe?"*; `drift`
+answers *"did anything change since last time?"*. Use them together — `detect`
+once at install, `audit` whenever you want a safety review, `drift` whenever
+you want to spot config that's regressed since you last applied.
 
 ## Quick start
 
@@ -69,6 +59,9 @@ sandshell apply
 
 # 7. Confirm the issues from step 4 are resolved. Should be 0 actionable findings.
 sandshell audit --summary
+
+# Later, in a future session: see what's changed since you last applied.
+sandshell drift
 ```
 
 In CI / pre-commit, use `verify` (exits 2 on findings ≥ medium):
@@ -115,8 +108,15 @@ MEDIUM (1)
     Claude Code PreToolUse Bash guard hook is not configured
     fix:   sandshell apply
 
-3 actionable findings (severity >= medium). --json for machine-readable output.
+3 actionable findings (severity >= medium).
+
+Drift since 2026-04-23T11:08:02Z: +1 new / -0 resolved
+  + cc.hooks.pre_bash  (medium)  Claude Code PreToolUse Bash guard hook is not configured
 ```
+
+The drift footer compares the current state against the baseline captured at
+your last `sandshell apply` (or last manual `sandshell audit --snapshot`).
+Resolved findings show as `-`; new findings (regressions) show as `+`.
 
 ## What audit checks
 
@@ -134,9 +134,20 @@ Adapters self-skip when their agent isn't installed.
 
 ## What `apply` configures
 
-`sandshell apply` writes safe defaults to Claude Code's settings hierarchy.
-Currently Claude-only (Codex/Gemini support follows in v0.3); for those agents,
-audit reports findings and points at the manual fixes.
+`sandshell apply` writes safe defaults for every detected agent. Each agent's
+config is independent — `apply` is idempotent, and you can target a single
+agent (`apply codex`) or all of them (`apply` / `apply all`).
+
+| Agent       | What `apply` writes                                                                                    | macOS enforcement today                                                |
+|-------------|--------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------|
+| Claude Code | Native sandbox + Bash PreToolUse/PostToolUse hooks + skill                                             | Filesystem ✓.  Network ✗ (upstream [#37970](https://github.com/anthropics/claude-code/issues/37970)) |
+| Codex CLI   | `~/.codex/config.toml`: `sandbox_mode=workspace-write`, `network_access=false`, `approval_policy=on-request` | Filesystem ✓.  Network ✓ (kernel-enforced via Seatbelt MAC)             |
+| Gemini CLI  | `~/.gemini/settings.json`: `tools.sandbox=sandbox-exec`, folder trust on, YOLO/always-allow off        | Filesystem ✓.  Network ✗ under sandbox-exec ([#20381](https://github.com/google-gemini/gemini-cli/issues/20381)); ✓ under `tools.sandbox=docker` |
+
+See [KNOWN_ISSUES.md](KNOWN_ISSUES.md) for upstream bugs that limit network
+enforcement on Claude Code and Gemini today. Sandshell writes
+forward-correct config so users get the benefit automatically when those
+fixes land.
 
 For Claude Code, `apply` configures three layers:
 
@@ -197,6 +208,51 @@ sandshell trail summary <session-id>    # roll-up classification of a session
 This is *retrospective* data, separate from `sandshell audit` (which is
 *pre-flight* config audit). Both are useful; they answer different questions.
 
+## Drift detection
+
+Every `sandshell apply` captures the post-apply audit state as a baseline at
+`~/.sandshell/baselines/current.json`, plus a timestamped historical copy at
+`~/.sandshell/baselines/audit-<timestamp>.json`. Subsequent `sandshell audit`
+runs compare against that baseline and report what's new or resolved:
+
+```
+$ sandshell drift
+Drift since 2026-04-29T15:32:14Z: +1 new / -2 resolved
+  + cc.permissions.wildcard_bash  (high)    Wildcard "Bash(*)" present in permissions.allow
+  - cc.sandbox.enabled            (critical)  Claude Code sandbox is not enabled  — resolved
+  - host.shell_alias_bypass       (high)    Alias 'claude' includes bypass flag    — resolved
+```
+
+This is the answer to *"did anything change since I last applied?"* — useful
+at session start, in pre-commit hooks, or whenever you want to spot quiet
+config regressions (a teammate's settings update, an agent self-modifying its
+own config, an out-of-band edit). Historical snapshots accumulate as a
+config-state audit trail that pairs with the Bash command audit trail above.
+
+```bash
+sandshell drift                       # show only the diff (no full findings list)
+sandshell audit                       # full findings + drift footer
+sandshell audit --snapshot --no-drift # capture a baseline manually
+sandshell audit --no-drift            # suppress drift output (e.g. in CI)
+```
+
+## Why not just rely on the agent's permission prompts?
+
+Agents already prompt before commands — Claude Code, Codex, Gemini, all of
+them. Sandshell sits one level up: it makes sure the *config the prompts run
+inside* is safe, narrow, and doesn't drift. Three things this solves that the
+prompts can't:
+
+- **One taxonomy across agents.** Different UIs and bypasses across Claude /
+  Codex / Gemini mean a user switching agents loses any safety habit. Audit
+  reports them in one format.
+- **Catches the silent-disable failure mode.** A `sandbox.enabled=false`
+  setting, a bypass alias, a `--dangerously-skip-permissions` shell flag —
+  none of these fire a runtime prompt; sandshell fires before the session.
+- **Surfaces drift between sessions.** When a setting regresses (teammate
+  edit, agent self-modification, out-of-band change), the next `audit`
+  flags it explicitly instead of letting it silently weaken your defaults.
+
 ## Threat model
 
 ### What sandshell meaningfully reduces
@@ -219,7 +275,6 @@ This is *retrospective* data, separate from `sandshell audit` (which is
 | Untrusted code execution at runtime    | Sandshell configures sandboxes; for unvetted dependencies or unknown repos, escalate to a microVM tool like Docker `sbx` |
 | Prompt injection                      | Sandshell limits the *blast radius* of an injected agent (via the sandbox), not the injection itself                  |
 | Real-time alerting / live monitoring  | Sandshell is a config linter, not a daemon                                                                           |
-| Sandbox enforcement on Codex/Gemini   | Audit flags issues but `apply` for those agents is v0.3+; today they need manual fixes                              |
 
 ## Status
 

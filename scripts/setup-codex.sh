@@ -257,3 +257,7 @@ or report an upstream issue.
 
 To remove sandshell's config: edit $CONFIG_FILE or delete the file.
 EOF
+
+# Refresh the drift baseline so the next 'sandshell audit' compares against
+# this post-apply state.
+"$SCRIPT_DIR/audit-config.sh" --snapshot --no-drift --json >/dev/null 2>&1 || true

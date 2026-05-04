@@ -150,3 +150,7 @@ The write should fail with "Operation not permitted".
 
 To remove: edit $SETTINGS_FILE or delete the file.
 EOF
+
+# Refresh the drift baseline so the next 'sandshell audit' compares against
+# this post-apply state.
+"$SCRIPT_DIR/audit-config.sh" --snapshot --no-drift --json >/dev/null 2>&1 || true

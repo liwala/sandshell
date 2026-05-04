@@ -13,8 +13,14 @@ trap 'rm -rf "$TMPDIR_TEST"' EXIT
 # Build a minimal sandshell tree in TMPDIR with only the runner script and
 # fixture adapters. This way we control exactly which adapters fire.
 FAKE_ROOT="$TMPDIR_TEST/sandshell"
-mkdir -p "$FAKE_ROOT/scripts" "$FAKE_ROOT/agents"
+mkdir -p "$FAKE_ROOT/scripts/lib" "$FAKE_ROOT/agents"
 cp "$ROOT/scripts/audit-config.sh" "$FAKE_ROOT/scripts/audit-config.sh"
+cp "$ROOT/scripts/lib/baseline.sh" "$FAKE_ROOT/scripts/lib/baseline.sh"
+
+# Pin the baseline dir into TMPDIR_TEST so drift state doesn't leak into the
+# real ~/.sandshell/baselines/ during tests, and earlier test cases can't
+# create snapshots that later cases see.
+export SANDSHELL_BASELINE_DIR="$TMPDIR_TEST/baselines"
 
 make_adapter() {
   local name="$1"
@@ -143,4 +149,67 @@ ec=$?
 set -e
 [[ "$ec" != "0" ]] || fail "case11: --json --summary should error, got exit $ec"
 
-echo "PASS: audit-config runner (sort, --json schema, --strict, --summary, malformed handling)"
+# ---------- Drift detection (cases 12+) ----------
+# Reset to a known fixture: one critical, one medium.
+rm -rf "$FAKE_ROOT/agents"/*
+make_adapter d 'cat <<JSON
+{"id":"d.crit","severity":"critical","title":"d crit"}
+{"id":"d.med","severity":"medium","title":"d med"}
+JSON'
+
+# Case 12: --drift-only with no baseline → friendly "no baseline yet" message.
+out=$("$FAKE_ROOT/scripts/audit-config.sh" --drift-only 2>&1)
+[[ "$out" == *"No baseline yet"* ]] || fail "case12: expected 'No baseline yet', got: $out"
+
+# Case 13: --snapshot writes current.json + a timestamped historical file.
+"$FAKE_ROOT/scripts/audit-config.sh" --snapshot --no-drift --json >/dev/null
+[[ -f "$SANDSHELL_BASELINE_DIR/current.json" ]] \
+  || fail "case13: --snapshot should write current.json"
+hist_count=$(ls "$SANDSHELL_BASELINE_DIR"/audit-*.json 2>/dev/null | wc -l)
+[[ "$hist_count" -ge 1 ]] || fail "case13: --snapshot should write a historical audit-*.json"
+
+# Case 14: re-running audit with no changes → drift footer says "No drift".
+out=$("$FAKE_ROOT/scripts/audit-config.sh" 2>&1)
+[[ "$out" == *"No drift since baseline"* ]] \
+  || fail "case14: expected 'No drift since baseline', got: $out"
+
+# Case 15: mutate adapter (resolve d.med, add d.new) → drift detects both.
+rm -rf "$FAKE_ROOT/agents/d"
+make_adapter d 'cat <<JSON
+{"id":"d.crit","severity":"critical","title":"d crit"}
+{"id":"d.new","severity":"high","title":"a new finding"}
+JSON'
+out=$("$FAKE_ROOT/scripts/audit-config.sh" --drift-only 2>&1)
+[[ "$out" == *"+1 new"* && "$out" == *"-1 resolved"* ]] \
+  || fail "case15: expected +1 new / -1 resolved, got: $out"
+[[ "$out" == *"d.new"* ]]  || fail "case15: drift should name added id d.new, got: $out"
+[[ "$out" == *"d.med"* ]]  || fail "case15: drift should name resolved id d.med, got: $out"
+
+# Case 16: --no-drift suppresses the footer in default human output.
+out=$("$FAKE_ROOT/scripts/audit-config.sh" --no-drift 2>&1)
+[[ "$out" != *"Drift since"* && "$out" != *"No drift"* ]] \
+  || fail "case16: --no-drift should suppress drift output, got: $out"
+
+# Case 17: --json includes a drift block when baseline exists.
+out=$("$FAKE_ROOT/scripts/audit-config.sh" --json 2>/dev/null)
+echo "$out" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+assert 'drift' in d, 'json output missing drift block'
+assert {f['id'] for f in d['drift']['added']} == {'d.new'}, d['drift']['added']
+assert {f['id'] for f in d['drift']['resolved']} == {'d.med'}, d['drift']['resolved']
+" || fail "case17: --json drift block malformed: $out"
+
+# Case 18: --summary includes drift counts when baseline exists.
+out=$("$FAKE_ROOT/scripts/audit-config.sh" --summary 2>/dev/null)
+[[ "$out" == *"drift_added=1"* ]]    || fail "case18: expected drift_added=1, got: $out"
+[[ "$out" == *"drift_resolved=1"* ]] || fail "case18: expected drift_resolved=1, got: $out"
+
+# Case 19: --drift-only and --json are mutually exclusive.
+set +e
+"$FAKE_ROOT/scripts/audit-config.sh" --drift-only --json >/dev/null 2>&1
+ec=$?
+set -e
+[[ "$ec" != "0" ]] || fail "case19: --drift-only --json should error, got exit $ec"
+
+echo "PASS: audit-config runner (sort, --json schema, --strict, --summary, malformed handling, drift)"

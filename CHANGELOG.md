@@ -6,10 +6,11 @@ All notable changes to this project should be documented in this file.
 
 ### Added
 
-- `bin/sandshell` top-level CLI dispatcher with verbs `detect`, `audit`, `apply`, `verify`.
+- `bin/sandshell` top-level CLI dispatcher with verbs `detect`, `audit`, `apply`, `verify`, `drift`.
 - `sandshell audit` — cross-agent config audit. Per-agent adapters in `agents/<name>/audit.sh` emit NDJSON findings; the runner aggregates, sorts by severity, prints human or `--json` output.
 - `sandshell audit --summary` — per-agent worst-severity rollup in `key=value` format (greppable; suitable for scripting).
 - `sandshell verify` — `audit --strict`; exits 2 on findings ≥ medium for CI / pre-commit gating.
+- **Drift detection.** Every `sandshell apply` snapshots the post-apply audit state to `~/.sandshell/baselines/current.json` plus a timestamped historical copy at `~/.sandshell/baselines/audit-<timestamp>.json`. Subsequent `sandshell audit` runs compare against that baseline and report what's new or resolved. New `sandshell drift` verb shows only the diff; `audit --snapshot` captures a baseline manually; `audit --no-drift` suppresses the footer (e.g. in CI). Historical snapshots accumulate as a config-state audit trail that pairs with the existing Bash command audit trail.
 - 32 audit checks across four adapters: 6 host (cross-agent shell aliases, env-var bypasses, long-lived creds, native-sandbox availability, cwd-is-git-repo, repo provenance), 14 Claude Code, 6 Codex, 11 Gemini.
 - `sandshell apply codex` — writes safe defaults to `~/.codex/config.toml` (`scripts/setup-codex.sh`).
 - `sandshell apply gemini` — writes safe defaults to `~/.gemini/settings.json` or `./.gemini/settings.json` (`scripts/setup-gemini.sh`); merges with existing keys via `jq`.

@@ -12,41 +12,67 @@
 #
 # Adapters self-detect whether their agent is installed; if not, they emit
 # zero findings and exit 0.
+#
+# Drift detection: when a baseline exists at ~/.sandshell/baselines/current.json,
+# the human/json output also reports findings new or resolved since that
+# snapshot. --snapshot writes a fresh baseline. Apply scripts call
+# `audit-config.sh --snapshot --no-drift --json >/dev/null` after writing
+# their config so the post-apply state becomes the new baseline.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 ADAPTERS_DIR="$ROOT/agents"
+# shellcheck source=lib/baseline.sh
+. "$SCRIPT_DIR/lib/baseline.sh"
 
 JSON_OUTPUT=false
 STRICT=false
 SUMMARY=false
+SNAPSHOT=false
+NO_DRIFT=false
+DRIFT_ONLY=false
 
 usage() {
   cat <<EOF
-Usage: audit-config.sh [--json | --summary] [--strict]
+Usage: audit-config.sh [--json | --summary | --drift-only] [--strict] [--snapshot] [--no-drift]
 
-  --json     Emit findings as a JSON array (machine-readable)
-  --summary  Per-agent worst-severity rollup, key=value format (greppable)
-  --strict   Exit 2 if any finding has severity >= medium (for verify / CI)
+  --json        Emit findings (and drift) as JSON (machine-readable)
+  --summary     Per-agent worst-severity rollup, key=value format (greppable)
+  --drift-only  Print only the drift block (what's new / resolved since baseline)
+  --strict      Exit 2 if any finding has severity >= medium (for verify / CI)
+  --snapshot    Write the current findings as the new baseline (used by apply)
+  --no-drift    Suppress drift output even if a baseline exists
 
 Adapters live in agents/<name>/audit.sh. Each is invoked independently and
 emits NDJSON findings to stdout.
+
+Drift baseline:
+  Stored under \${SANDSHELL_BASELINE_DIR:-~/.sandshell/baselines}/.
+  current.json is the comparison target; audit-<ts>.json files are
+  historical snapshots, retained indefinitely.
 EOF
 }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --json)    JSON_OUTPUT=true; shift ;;
-    --summary) SUMMARY=true; shift ;;
-    --strict)  STRICT=true; shift ;;
+    --json)        JSON_OUTPUT=true; shift ;;
+    --summary)     SUMMARY=true; shift ;;
+    --drift-only)  DRIFT_ONLY=true; shift ;;
+    --strict)      STRICT=true; shift ;;
+    --snapshot)    SNAPSHOT=true; shift ;;
+    --no-drift)    NO_DRIFT=true; shift ;;
     -h|--help|help) usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage >&2; exit 1 ;;
   esac
 done
 
-if [[ "$JSON_OUTPUT" == "true" && "$SUMMARY" == "true" ]]; then
-  echo "ERROR: --json and --summary are mutually exclusive" >&2
+modes=0
+$JSON_OUTPUT && modes=$((modes+1))
+$SUMMARY && modes=$((modes+1))
+$DRIFT_ONLY && modes=$((modes+1))
+if [[ "$modes" -gt 1 ]]; then
+  echo "ERROR: --json, --summary, and --drift-only are mutually exclusive" >&2
   exit 1
 fi
 
@@ -75,16 +101,42 @@ for adapter in "$ADAPTERS_DIR"/*/audit.sh; do
 done
 shopt -u nullglob
 
+baseline_dir="$(sandshell_baseline_dir)"
+baseline_current="$(sandshell_baseline_current)"
+[[ "$NO_DRIFT" = "true" ]] && baseline_current=""
+[[ -f "$baseline_current" ]] || baseline_current=""
+
+# Snapshot target (timestamped historical + current.json refresh). Done in
+# Python after the JSON envelope is built; here we just compute the path.
+snapshot_hist=""
+if [[ "$SNAPSHOT" = "true" ]]; then
+  mkdir -p "$baseline_dir"
+  snapshot_hist="$baseline_dir/audit-$(date -u +%Y-%m-%dT%H-%M-%SZ).json"
+fi
+
 # Format and emit
-python3 - "$findings_file" "$JSON_OUTPUT" "$STRICT" "$SUMMARY" "${ran_adapters[*]:-}" <<'PY'
+python3 - \
+  "$findings_file" \
+  "$JSON_OUTPUT" \
+  "$STRICT" \
+  "$SUMMARY" \
+  "$DRIFT_ONLY" \
+  "$baseline_current" \
+  "$snapshot_hist" \
+  "$baseline_dir/current.json" \
+  "${ran_adapters[*]:-}" <<'PY'
 import json, os, sys
 from datetime import datetime, timezone
 
-findings_path = sys.argv[1]
-json_output = sys.argv[2] == "true"
-strict = sys.argv[3] == "true"
-summary = sys.argv[4] == "true"
-ran_adapters = sys.argv[5].split() if len(sys.argv) > 5 else []
+findings_path     = sys.argv[1]
+json_output       = sys.argv[2] == "true"
+strict            = sys.argv[3] == "true"
+summary           = sys.argv[4] == "true"
+drift_only        = sys.argv[5] == "true"
+baseline_current  = sys.argv[6]                                 # "" if no baseline / suppressed
+snapshot_hist     = sys.argv[7]                                 # "" if --snapshot not set
+baseline_pointer  = sys.argv[8]                                 # current.json path (always set)
+ran_adapters      = sys.argv[9].split() if len(sys.argv) > 9 else []
 
 SEVERITY_ORDER = {"critical": 0, "high": 1, "medium": 2, "info": 3}
 ACTIONABLE = {"critical", "high", "medium"}
@@ -100,6 +152,8 @@ COLORS = {
     "high":     "\033[1;33m",  # bold yellow
     "medium":   "\033[1;34m",  # bold blue
     "info":     "\033[2;37m",  # dim white
+    "added":    "\033[1;31m",  # new findings since baseline = regression
+    "resolved": "\033[1;32m",  # resolved findings = improvement
 }
 def c(name, text):
     if not USE_COLOR:
@@ -146,7 +200,79 @@ with open(findings_path) as f:
 
 findings.sort(key=lambda f: (SEVERITY_ORDER[f["severity"]], f["id"]))
 
-if summary:
+# Compute drift against the baseline (if one is loadable).
+drift = None
+if baseline_current and os.path.exists(baseline_current):
+    try:
+        with open(baseline_current) as f:
+            base = json.load(f)
+        base_findings = base.get("findings", [])
+        base_ts = base.get("timestamp", "")
+        cur_ids = {f["id"]: f for f in findings}
+        base_ids = {f["id"]: f for f in base_findings}
+        added_ids   = sorted(cur_ids.keys() - base_ids.keys(),
+                             key=lambda i: (SEVERITY_ORDER[cur_ids[i]["severity"]], i))
+        resolved_ids = sorted(base_ids.keys() - cur_ids.keys(),
+                              key=lambda i: (SEVERITY_ORDER[base_ids[i]["severity"]], i))
+        drift = {
+            "baseline_timestamp": base_ts,
+            "added":    [cur_ids[i]   for i in added_ids],
+            "resolved": [base_ids[i]  for i in resolved_ids],
+        }
+    except (OSError, json.JSONDecodeError) as e:
+        print(f"WARNING: could not read baseline at {baseline_current}: {e}", file=sys.stderr)
+
+# Build the JSON envelope (same shape used for output and snapshots).
+envelope = {
+    "version": "0.2",
+    "timestamp": datetime.now(timezone.utc).isoformat(),
+    "findings": findings,
+}
+if drift is not None:
+    envelope["drift"] = drift
+
+# Optionally write the snapshot. We snapshot the findings only (not the drift
+# block) — the next run will recompute drift against this snapshot.
+if snapshot_hist:
+    snap = {k: v for k, v in envelope.items() if k != "drift"}
+    try:
+        os.makedirs(os.path.dirname(snapshot_hist), exist_ok=True)
+        with open(snapshot_hist, "w") as f:
+            json.dump(snap, f, indent=2)
+        with open(baseline_pointer, "w") as f:
+            json.dump(snap, f, indent=2)
+    except OSError as e:
+        print(f"WARNING: could not write snapshot at {snapshot_hist}: {e}", file=sys.stderr)
+
+# ---------- output ----------
+
+def print_drift_human(d):
+    """Render the drift block to stdout. Caller decides when to call this."""
+    added, resolved = d["added"], d["resolved"]
+    base_ts = d["baseline_timestamp"]
+    if not added and not resolved:
+        print(c("dim", f"No drift since baseline ({base_ts})."))
+        return
+    print(c("bold", f"Drift since {base_ts}: ") +
+          f"{c('added', f'+{len(added)} new')} / "
+          f"{c('resolved', f'-{len(resolved)} resolved')}")
+    if added:
+        for f in added:
+            print(f"  {c('added', '+')} {c('bold', f['id'])}  "
+                  f"({c(f['severity'], f['severity'])})  {shorten(f['title'])}")
+    if resolved:
+        for f in resolved:
+            print(f"  {c('resolved', '-')} {c('bold', f['id'])}  "
+                  f"({c(f['severity'], f['severity'])})  {shorten(f['title'])}  "
+                  f"{c('dim', '— resolved')}")
+
+if drift_only:
+    if drift is None:
+        print("No baseline yet. Run 'sandshell apply' (or 'sandshell audit --snapshot') to capture one.")
+    else:
+        print_drift_human(drift)
+
+elif summary:
     # Worst severity per adapter; "ok" if no findings.
     worst_by_adapter = {a: None for a in ran_adapters}
     for f in findings:
@@ -155,7 +281,6 @@ if summary:
         if a not in worst_by_adapter or worst_by_adapter[a] is None \
            or SEVERITY_ORDER[sev] < SEVERITY_ORDER[worst_by_adapter[a]]:
             worst_by_adapter[a] = sev
-    # Severity counts
     counts = {s: 0 for s in SEVERITY_ORDER}
     for f in findings:
         counts[f["severity"]] += 1
@@ -167,13 +292,12 @@ if summary:
         print(f"count_{sev}={counts[sev]}")
     for a in sorted(worst_by_adapter):
         print(f"agent_{a}={worst_by_adapter[a] or 'ok'}")
+    if drift is not None:
+        print(f"drift_added={len(drift['added'])}")
+        print(f"drift_resolved={len(drift['resolved'])}")
 
 elif json_output:
-    print(json.dumps({
-        "version": "0.2",
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "findings": findings,
-    }, indent=2))
+    print(json.dumps(envelope, indent=2))
 
 else:
     ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -205,12 +329,16 @@ else:
 
         actionable = sum(1 for f in findings if f["severity"] in ACTIONABLE)
         if actionable == 0:
-            # All findings shown above are info-level — advisory, not blocking.
             print("No actionable findings. (Entries above are info-level — advisory.)")
         elif actionable == 1:
             print("1 actionable finding (severity >= medium).")
         else:
             print(f"{actionable} actionable findings (severity >= medium).")
+
+    # Drift footer (default human output only).
+    if drift is not None:
+        print()
+        print_drift_human(drift)
 
 if strict:
     actionable = sum(1 for f in findings if f["severity"] in ACTIONABLE)

@@ -26,6 +26,8 @@ Verbs:
                    sandshell install-agent amp
                    sandshell install-agent generic project
   audit          Audit safety configs across detected agents (--json, --summary)
+  drift          Show what changed since the last apply / snapshot
+                 (alias for 'audit --drift-only')
   verify         Re-run audit; exit 2 on findings >= medium (for CI / pre-commit)
   apply          Apply safe-default *configs*. Forms:
                    sandshell apply                          # all detected agents
@@ -140,6 +142,9 @@ case "$verb" in
     ;;
   audit)
     exec "$SCRIPTS_DIR/audit-config.sh" "$@"
+    ;;
+  drift)
+    exec "$SCRIPTS_DIR/audit-config.sh" --drift-only "$@"
     ;;
   verify)
     exec "$SCRIPTS_DIR/audit-config.sh" --strict "$@"
