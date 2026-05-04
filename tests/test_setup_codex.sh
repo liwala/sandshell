@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Tests scripts/setup-codex.sh — writes a TOML config with the sandshell-managed
-# safety defaults; refuses to overwrite a non-managed file without --force;
-# is idempotent on re-apply.
+# safety defaults; merges by default into existing non-managed configs (preserving
+# user keys); is idempotent on re-apply; --force unconditionally overwrites.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -27,21 +27,45 @@ grep -q '^network_access = false' "$config" \
 HOME="$TMPDIR_TEST/case1" "$ROOT/scripts/setup-codex.sh" >/dev/null
 grep -q "Managed by sandshell" "$config" || fail "case2: marker lost on re-apply"
 
-# Case 3: refuses to overwrite a non-sandshell file without --force.
+# Case 3: merges by default into a non-sandshell file — preserves user keys
+# while applying sandshell's safety keys.
 mkdir -p "$TMPDIR_TEST/case3/.codex"
-echo '# user content not sandshell' > "$TMPDIR_TEST/case3/.codex/config.toml"
-set +e
-HOME="$TMPDIR_TEST/case3" "$ROOT/scripts/setup-codex.sh" >/dev/null 2>&1
-ec=$?
-set -e
-[[ "$ec" -ne 0 ]] || fail "case3: expected non-zero exit on conflict, got $ec"
-grep -q "user content not sandshell" "$TMPDIR_TEST/case3/.codex/config.toml" \
-  || fail "case3: original content was overwritten"
+cat > "$TMPDIR_TEST/case3/.codex/config.toml" <<'EOF'
+model = "gpt-5"
+some_user_key = "preserved"
 
-# Case 4: --force overwrites the existing non-managed file.
-HOME="$TMPDIR_TEST/case3" "$ROOT/scripts/setup-codex.sh" --force >/dev/null
-grep -q "Managed by sandshell" "$TMPDIR_TEST/case3/.codex/config.toml" \
-  || fail "case4: --force did not overwrite"
+[profiles.work]
+sandbox_mode = "workspace-write"
+EOF
+HOME="$TMPDIR_TEST/case3" "$ROOT/scripts/setup-codex.sh" >/dev/null
+merged="$TMPDIR_TEST/case3/.codex/config.toml"
+grep -q '^model = "gpt-5"' "$merged" \
+  || fail "case3 (merge): user's 'model' key was not preserved"
+grep -q '^some_user_key = "preserved"' "$merged" \
+  || fail "case3 (merge): user's custom key was not preserved"
+grep -q '^\[profiles\.work\]' "$merged" \
+  || fail "case3 (merge): user's [profiles.work] section was not preserved"
+grep -q '^sandbox_mode = "workspace-write"' "$merged" \
+  || fail "case3 (merge): sandshell sandbox_mode was not applied"
+grep -q '^approval_policy = "on-request"' "$merged" \
+  || fail "case3 (merge): sandshell approval_policy was not applied"
+grep -q '^network_access = false' "$merged" \
+  || fail "case3 (merge): sandshell network_access was not applied"
+grep -q "Managed by sandshell" "$merged" \
+  || fail "case3 (merge): sandshell marker comment missing after merge"
+
+# Case 4: --force overwrites the existing non-managed file (drops user keys).
+mkdir -p "$TMPDIR_TEST/case4/.codex"
+cat > "$TMPDIR_TEST/case4/.codex/config.toml" <<'EOF'
+some_user_key = "should-be-gone"
+EOF
+HOME="$TMPDIR_TEST/case4" "$ROOT/scripts/setup-codex.sh" --force >/dev/null
+forced="$TMPDIR_TEST/case4/.codex/config.toml"
+grep -q "Managed by sandshell" "$forced" \
+  || fail "case4 (--force): did not overwrite to sandshell-managed"
+if grep -q "some_user_key" "$forced"; then
+  fail "case4 (--force): user key should have been dropped, but is still present"
+fi
 
 # Case 5: --show is dry-run (writes nothing).
 out=$(HOME="$TMPDIR_TEST/case5" "$ROOT/scripts/setup-codex.sh" --show 2>&1)
@@ -50,4 +74,4 @@ out=$(HOME="$TMPDIR_TEST/case5" "$ROOT/scripts/setup-codex.sh" --show 2>&1)
 [[ ! -f "$TMPDIR_TEST/case5/.codex/config.toml" ]] \
   || fail "case5: --show should not write a file"
 
-echo "PASS: setup-codex writes safe defaults, refuses unmanaged overwrite, --show is dry-run"
+echo "PASS: setup-codex writes safe defaults, merges into existing user configs, --force overwrites, --show is dry-run"
