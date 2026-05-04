@@ -5,6 +5,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 HOOK_SCRIPT="$SCRIPT_DIR/hook-post-bash.sh"
 GUARD_SCRIPT="$SCRIPT_DIR/hook-pre-bash.sh"
+# shellcheck source=lib/diff-apply.sh
+. "$SCRIPT_DIR/lib/diff-apply.sh"
 
 # Determine where to install — user (home dir) or project (repo) scope
 SCOPE="${1:-user}"
@@ -83,11 +85,14 @@ PRE_HOOK_CONFIG=$(cat <<EOF
 EOF
 )
 
+sandshell_diff_snapshot "$SETTINGS_FILE"
+
 if [[ -f "$SETTINGS_FILE" ]]; then
   # Check if sandshell hooks already exist
   if grep -q "hook-post-bash.sh" "$SETTINGS_FILE" 2>/dev/null && \
      grep -q "hook-pre-bash.sh" "$SETTINGS_FILE" 2>/dev/null; then
     echo "sandshell hooks already configured in $SETTINGS_FILE"
+    sandshell_diff_show "$SETTINGS_FILE"
     exit 0
   fi
 
@@ -121,6 +126,8 @@ fi
 
 echo ""
 echo "Hooks configured in $SETTINGS_FILE"
+echo ""
+sandshell_diff_show "$SETTINGS_FILE"
 echo ""
 echo "What this does:"
 echo "  - Blocks obvious sandbox-disabling Bash commands before execution"

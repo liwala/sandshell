@@ -5,6 +5,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROFILES_DIR="$(cd "$SCRIPT_DIR/../profiles" && pwd)"
+# shellcheck source=lib/diff-apply.sh
+. "$SCRIPT_DIR/lib/diff-apply.sh"
 
 usage() {
   echo "Usage: setup-sandbox.sh [user|project] [--profile=default|node|python]"
@@ -143,6 +145,7 @@ if [[ "$SHOW_ONLY" = true ]]; then
 fi
 
 mkdir -p "$SETTINGS_DIR"
+sandshell_diff_snapshot "$SETTINGS_FILE"
 
 if [[ -f "$SETTINGS_FILE" ]]; then
   # Check if sandbox is already configured by sandshell
@@ -172,6 +175,8 @@ else
 fi
 
 echo "Native sandbox configured in $SETTINGS_FILE"
+echo ""
+sandshell_diff_show "$SETTINGS_FILE"
 echo ""
 echo "What this enforces:"
 echo "  - Filesystem writes restricted to current working directory"

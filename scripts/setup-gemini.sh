@@ -14,6 +14,10 @@
 # config.networkAccess); Issues #20381, #20046.
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=lib/diff-apply.sh
+. "$SCRIPT_DIR/lib/diff-apply.sh"
+
 usage() {
   cat <<EOF
 Usage: setup-gemini.sh [user|project] [--show]
@@ -94,6 +98,7 @@ if [[ "$SHOW_ONLY" = true ]]; then
 fi
 
 mkdir -p "$SETTINGS_DIR"
+sandshell_diff_snapshot "$SETTINGS_FILE"
 
 if [[ -f "$SETTINGS_FILE" ]]; then
   if grep -q '"sandshell_managed"' "$SETTINGS_FILE" 2>/dev/null; then
@@ -116,6 +121,9 @@ if [[ -f "$SETTINGS_FILE" ]]; then
 else
   echo "$GEMINI_CONFIG" | jq '.' > "$SETTINGS_FILE"
 fi
+
+echo ""
+sandshell_diff_show "$SETTINGS_FILE"
 
 cat <<EOF
 

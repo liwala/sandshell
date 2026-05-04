@@ -11,6 +11,10 @@
 # seatbelt_base_policy.sbpl line 8 `(deny default)`.
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=lib/diff-apply.sh
+. "$SCRIPT_DIR/lib/diff-apply.sh"
+
 CONFIG_DIR="$HOME/.codex"
 CONFIG_FILE="$CONFIG_DIR/config.toml"
 FORCE=false
@@ -89,6 +93,8 @@ if [[ -f "$CONFIG_FILE" ]]; then
     ACTION="merge"     # user content present; preserve their keys
   fi
 fi
+
+sandshell_diff_snapshot "$CONFIG_FILE"
 
 case "$ACTION" in
   fresh|rewrite|overwrite)
@@ -214,8 +220,12 @@ case "$ACTION" in
   merge)     summary="Merged safety defaults into existing $CONFIG_FILE (user keys preserved; comments not preserved)" ;;
 esac
 
+echo "sandshell: $summary"
+echo ""
+sandshell_diff_show "$CONFIG_FILE"
+echo ""
+
 cat <<EOF
-sandshell: $summary
 
 What this enforces:
   - Filesystem writes: restricted to current working directory
