@@ -1,17 +1,22 @@
 #!/usr/bin/env bash
-# sandshell: detect Claude sandbox and hook configuration
+# sandshell: report host inventory — OS, architecture, native sandbox primitive,
+# dependencies, and which AI coding agents are installed.
+#
+# Pure inventory: this answers "what do I have?". For "is it safe?", run
+# `sandshell audit` (per-finding) or `sandshell audit --summary` (per-agent
+# rollup). Output is key=value lines with optional comment hints prefixed by `#`.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SANDSHELL_CLI="$(cd "$SCRIPT_DIR/.." && pwd)/bin/sandshell"
 
 # OS and architecture
 echo "os=$(uname -s | tr '[:upper:]' '[:lower:]')"
 echo "arch=$(uname -m)"
 
-# Native OS sandbox (Seatbelt on macOS, bubblewrap on Linux)
+# Native OS sandbox primitive (Seatbelt on macOS, bubblewrap on Linux)
 case "$(uname -s)" in
   Darwin)
-    # macOS always has Seatbelt (sandbox-exec)
     if command -v sandbox-exec >/dev/null 2>&1; then
       echo "native_sandbox=seatbelt"
     else
@@ -31,57 +36,55 @@ case "$(uname -s)" in
     ;;
 esac
 
-# Check if Claude Code sandbox is configured AND actually enabled.
-# The `sandbox` block in settings.json is inert unless `sandbox.enabled == true`
-# (CC defaults it to false). We report `true` only when enforcement will fire
-# on the next fresh session; a present-but-disabled config is reported as
-# `false` with a distinct warning so users don't mistake it for protection.
-sandbox_is_enabled() {
-  local file="$1"
-  [[ -f "$file" ]] || return 1
-  python3 - "$file" <<'PY' 2>/dev/null
-import json, sys
-try:
-    with open(sys.argv[1]) as f:
-        data = json.load(f)
-    sys.exit(0 if data.get("sandbox", {}).get("enabled") is True else 1)
-except Exception:
-    sys.exit(1)
-PY
-}
-
-sandbox_managed_marker_present() {
-  local file="$1"
-  [[ -f "$file" ]] && grep -q '"sandshell_managed"' "$file" 2>/dev/null
-}
-
-if sandbox_is_enabled "$HOME/.claude/settings.json" \
-   || sandbox_is_enabled ".claude/settings.json"; then
-  echo "cc_sandbox_configured=true"
+# Dependencies — jq, python3 version, tomllib (for Codex audit)
+if command -v jq >/dev/null 2>&1; then
+  echo "dep_jq=present"
 else
-  echo "cc_sandbox_configured=false"
-  if sandbox_managed_marker_present "$HOME/.claude/settings.json" \
-     || sandbox_managed_marker_present ".claude/settings.json"; then
-    echo "# WARNING: sandbox block present but sandbox.enabled is not true — re-run setup-sandbox.sh"
+  echo "dep_jq=missing"
+  echo "# Required: brew install jq (macOS) / apt install jq (Linux)"
+fi
+
+if command -v python3 >/dev/null 2>&1; then
+  py_ver="$(python3 -c 'import sys; print(f"{sys.version_info[0]}.{sys.version_info[1]}")' 2>/dev/null || echo "unknown")"
+  echo "dep_python3=$py_ver"
+  if python3 -c 'import tomllib' >/dev/null 2>&1; then
+    echo "dep_tomllib=available"
   else
-    echo "# Recommended: ${SCRIPT_DIR}/setup-sandbox.sh personal --profile=default"
+    echo "dep_tomllib=unavailable"
+    echo "# Codex audit needs Python 3.11+ for tomllib (built-in)"
   fi
+else
+  echo "dep_python3=missing"
+  echo "dep_tomllib=unavailable"
+  echo "# Required: install python3 (macOS: ships by default; Linux: apt install python3)"
 fi
 
-# Check if audit hooks are configured
-if [[ -f "$HOME/.claude/settings.json" ]] && grep -q "hook-post-bash.sh" "$HOME/.claude/settings.json" 2>/dev/null; then
-  echo "audit_hooks_configured=true"
-elif [[ -f ".claude/settings.json" ]] && grep -q "hook-post-bash.sh" ".claude/settings.json" 2>/dev/null; then
-  echo "audit_hooks_configured=true"
-else
-  echo "audit_hooks_configured=false"
-  echo "# Recommended: ${SCRIPT_DIR}/setup-hooks.sh personal"
-fi
+# Agent presence — does the user have each known agent?
+agent_present() {
+  local name="$1" cmd="$2"
+  shift 2
+  if command -v "$cmd" >/dev/null 2>&1; then
+    echo "agent_${name}=installed"
+    return
+  fi
+  local hint
+  for hint in "$@"; do
+    if [[ -e "$hint" ]]; then
+      echo "agent_${name}=config_only"
+      return
+    fi
+  done
+  echo "agent_${name}=absent"
+}
 
-if [[ -f "$HOME/.claude/settings.json" ]] && grep -q "hook-pre-bash.sh" "$HOME/.claude/settings.json" 2>/dev/null; then
-  echo "bash_guard_configured=true"
-elif [[ -f ".claude/settings.json" ]] && grep -q "hook-pre-bash.sh" ".claude/settings.json" 2>/dev/null; then
-  echo "bash_guard_configured=true"
-else
-  echo "bash_guard_configured=false"
+agent_present claude  claude  "$HOME/.claude"  "$HOME/.claude.json"  ".claude"
+agent_present codex   codex   "$HOME/.codex"
+agent_present gemini  gemini  "$HOME/.gemini"  ".gemini"
+agent_present amp     amp     "$HOME/.config/amp"  ".amp"
+
+# Pointer to audit if any agent is present.
+if command -v claude >/dev/null 2>&1 || [[ -d "$HOME/.claude" ]] \
+   || command -v codex >/dev/null 2>&1 || [[ -d "$HOME/.codex" ]] \
+   || command -v gemini >/dev/null 2>&1 || [[ -d "$HOME/.gemini" ]]; then
+  echo "# For safety evaluation: $SANDSHELL_CLI audit"
 fi

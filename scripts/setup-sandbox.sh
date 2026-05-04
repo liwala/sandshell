@@ -7,31 +7,38 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROFILES_DIR="$(cd "$SCRIPT_DIR/../profiles" && pwd)"
 
 usage() {
-  echo "Usage: setup-sandbox.sh [personal|project] [--profile=default|node|python|minimal]"
+  echo "Usage: setup-sandbox.sh [user|project] [--profile=default|node|python]"
   echo ""
   echo "Configures Claude Code's native OS sandbox (Seatbelt on macOS, bubblewrap on Linux)."
   echo "This provides kernel-level filesystem and network restrictions that the agent"
   echo "CANNOT bypass — even if prompt-injected."
   echo ""
-  echo "  personal  Install to ~/.claude/settings.json (default)"
+  echo "  user      Install to ~/.claude/settings.json (default; was 'personal' in v0.1)"
   echo "  project   Install to .claude/settings.json"
   echo ""
+  echo "  Legacy scope names accepted: 'personal' (alias for 'user')."
+  echo ""
   echo "Options:"
-  echo "  --profile=NAME  Network profile: default, node, python, minimal"
+  echo "  --profile=NAME  Network profile: default, node, python"
   echo "  --strict        Also deny reads to sensitive directories"
   echo "  --show          Print the config that would be applied (dry run)"
   exit 0
 }
 
 # Defaults
-SCOPE="personal"
+SCOPE="user"
 PROFILE="default"
 STRICT=false
 SHOW_ONLY=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    personal|project) SCOPE="$1"; shift ;;
+    user|project) SCOPE="$1"; shift ;;
+    personal)
+      SCOPE="user"
+      echo "Note: 'personal' is the legacy name for 'user' — both still accepted." >&2
+      shift
+      ;;
     --profile=*)      PROFILE="${1#*=}"; shift ;;
     --strict)         STRICT=true; shift ;;
     --show)           SHOW_ONLY=true; shift ;;
@@ -50,8 +57,8 @@ fi
 
 # Determine settings file location
 case "$SCOPE" in
-  personal) SETTINGS_DIR="$HOME/.claude"; SETTINGS_FILE="$SETTINGS_DIR/settings.json" ;;
-  project)  SETTINGS_DIR=".claude"; SETTINGS_FILE="$SETTINGS_DIR/settings.json" ;;
+  user)    SETTINGS_DIR="$HOME/.claude"; SETTINGS_FILE="$SETTINGS_DIR/settings.json" ;;
+  project) SETTINGS_DIR=".claude"; SETTINGS_FILE="$SETTINGS_DIR/settings.json" ;;
 esac
 
 # Load allowed domains from profile
@@ -91,7 +98,16 @@ if [[ "$STRICT" = true ]]; then
   ]')
 fi
 
-# Build sandbox config
+# Build sandbox config using Claude Code's documented schema:
+#   sandbox.filesystem.allowWrite  — additional writable paths (cwd is implicit)
+#   sandbox.filesystem.denyRead    — paths the agent must not read
+#   sandbox.network.allowedDomains — outbound network allowlist
+# Reference: https://code.claude.com/docs/en/sandboxing
+#
+# Note: v0.1 used the legacy field names (filesystem.write.allowOnly,
+# filesystem.read.denyOnly, network.allowedHosts), which Claude Code does not
+# enforce as expected (notably allowedHosts was silently ignored). The audit's
+# `cc.sandbox.legacy_schema` check flags settings still using the old names.
 SANDBOX_CONFIG=$(jq -n \
   --argjson domains "$domains_json" \
   --argjson deny_read "$DENY_READ" \
@@ -104,17 +120,11 @@ SANDBOX_CONFIG=$(jq -n \
     "sandbox": {
       "enabled": true,
       "filesystem": {
-        "write": {
-          "allowOnly": [".", "$TMPDIR"],
-          "denyWithinAllow": []
-        },
-        "read": {
-          "denyOnly": $deny_read,
-          "allowWithinDeny": []
-        }
+        "allowWrite": ["$TMPDIR", "/tmp"],
+        "denyRead": $deny_read
       },
       "network": {
-        "allowedHosts": $domains
+        "allowedDomains": $domains
       }
     }
   }')
@@ -163,24 +173,27 @@ fi
 
 echo "Native sandbox configured in $SETTINGS_FILE"
 echo ""
-echo "What this enforces (OS-level, agent CANNOT bypass):"
-echo "  - Filesystem writes restricted to project directory + \$TMPDIR"
-echo "  - Network limited to ${#domains[@]} allowed domains ($PROFILE profile)"
-echo "  - --dangerouslyDisableSandbox is denied"
+echo "What this enforces:"
+echo "  - Filesystem writes restricted to current working directory"
+echo "    (additionally allowWrite: \$TMPDIR, /tmp)"
+echo "  - --dangerouslyDisableSandbox is denied via permissions.deny"
 if [[ "$STRICT" = true ]]; then
-  echo "  - Reads blocked to: ~/.ssh, ~/.aws, ~/.kube, ~/.gnupg, etc."
+  echo "  - Reads denied to: ~/.ssh, ~/.aws, ~/.kube, ~/.gnupg, etc."
 fi
 echo ""
-echo "  macOS: enforced via Seatbelt (kernel-level)"
-echo "  Linux: enforced via bubblewrap (namespace-level)"
+echo "Network allowlist (${#domains[@]} domains via $PROFILE profile) — IMPORTANT:"
+echo "  Sandshell writes the documented allowedDomains schema (forward-correct"
+echo "  + works on Linux). On macOS today, Claude Code has open bug #37970"
+echo "  where allowedDomains is silently not enforced for Bash subprocesses."
+echo "  See KNOWN_ISSUES.md. For tasks that genuinely need network containment,"
+echo "  use sandshell apply codex (kernel-enforced via Seatbelt MAC) or Docker sbx."
 echo ""
-echo "VERIFY it is actually enforcing — don't trust config presence alone."
-echo "  In any Claude Code session, run these two probes and confirm both fail:"
-echo "    echo test > \"\$HOME/sandshell-probe.txt\"   # should be Operation not permitted"
-echo "    curl -sS --max-time 5 https://example.com  # should time out"
+echo "Filesystem enforcement — verify in any new Claude Code session:"
+echo "    echo test > \"\$HOME/sandshell-probe.txt\""
+echo "  Should fail with 'Operation not permitted' (this part actually works)."
 echo ""
-echo "If either probe succeeds, the sandbox is NOT enforcing. Check that:"
-echo "  - sandbox.enabled is true in $SETTINGS_FILE"
-echo "  - the file is actually loaded (Claude Code /config → Settings → Scopes)"
+echo "Network enforcement is currently a known-broken upstream:"
+echo "    curl -sS --max-time 5 https://example.com"
+echo "  Will likely succeed with HTTP 200 despite the allowlist (bug #37970)."
 echo ""
-echo "To remove: edit $SETTINGS_FILE and delete the sandbox/permissions entries."
+echo "To remove: ${SCRIPT_DIR}/uninstall.sh user|project"

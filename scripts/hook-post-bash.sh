@@ -25,8 +25,8 @@ exit_code=$(echo "$input" | jq -r '.tool_response.exitCode // empty')
 # Use first 8 chars of session ID to match sandshell convention
 short_session="${session_id:0:8}"
 
-# Skip self-logging for direct audit writes.
-if [[ "$command_str" == *"audit.sh"* ]]; then
+# Skip self-logging for direct audit-trail writes.
+if [[ "$command_str" == *"audit-trail.sh"* ]]; then
   exit 0  # Already logged by the scripts themselves
 fi
 

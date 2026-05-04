@@ -10,7 +10,7 @@ CODEX_TEMPLATE="$AGENTS_DIR/CODEX.md"
 GENERIC_TEMPLATE="$AGENTS_DIR/GENERIC.md"
 
 usage() {
-  echo "Usage: install-agent.sh <agent> [personal|project]"
+  echo "Usage: install-agent.sh <agent> [user|project]"
   echo ""
   echo "Installs sandshell instructions for a specific AI coding agent."
   echo ""
@@ -23,8 +23,10 @@ usage() {
   echo "  all       Install for all supported agents"
   echo ""
   echo "Scope:"
-  echo "  personal  Install to user-level config (default)"
+  echo "  user      Install to user-level config (default; was 'personal' in v0.1)"
   echo "  project   Install to project-level config"
+  echo ""
+  echo "Legacy scope names accepted: 'personal' (alias for 'user')."
   exit 0
 }
 
@@ -80,11 +82,11 @@ append_marked_templates() {
 }
 
 install_claude() {
-  local scope="${1:-personal}"
+  local scope="${1:-user}"
   local target_dir
 
   case "$scope" in
-    personal) target_dir="$HOME/.claude/skills/sandshell" ;;
+    user)     target_dir="$HOME/.claude/skills/sandshell" ;;
     project)  target_dir=".claude/skills/sandshell" ;;
   esac
 
@@ -95,7 +97,7 @@ install_claude() {
   fi
 
   # For Claude Code, just symlink or copy the whole skill directory
-  if [[ "$scope" = "personal" ]]; then
+  if [[ "$scope" = "user" ]]; then
     mkdir -p "$HOME/.claude/skills"
     if [[ -L "$target_dir" ]]; then
       rm "$target_dir"
@@ -115,11 +117,11 @@ install_claude() {
 }
 
 install_codex() {
-  local scope="${1:-personal}"
+  local scope="${1:-user}"
   local target_dir
 
   case "$scope" in
-    personal) target_dir="$HOME/.codex/skills/sandshell" ;;
+    user)     target_dir="$HOME/.codex/skills/sandshell" ;;
     project)  target_dir=".codex/skills/sandshell" ;;
   esac
 
@@ -151,7 +153,7 @@ install_generic() {
   local sandshell_path="$SANDSHELL_DIR"
 
   case "$scope" in
-    personal) target_file="$HOME/.sandshell/SANDSHELL.md" ;;
+    user)     target_file="$HOME/.sandshell/SANDSHELL.md" ;;
     project)  target_file="SANDSHELL.md" ;;
   esac
 
@@ -168,11 +170,11 @@ install_generic() {
 }
 
 install_gemini() {
-  local scope="${1:-personal}"
+  local scope="${1:-user}"
   local target_file
 
   case "$scope" in
-    personal) target_file="$HOME/.gemini/GEMINI.md" ;;
+    user)     target_file="$HOME/.gemini/GEMINI.md" ;;
     project)  target_file="GEMINI.md" ;;
   esac
 
@@ -195,8 +197,8 @@ install_amp() {
   local scope="${1:-project}"
   local target_file="AGENTS.md"
 
-  if [[ "$scope" = "personal" ]]; then
-    echo "Amp: personal scope not supported (Amp reads AGENTS.md from the repo)"
+  if [[ "$scope" = "user" ]]; then
+    echo "Amp: user scope not supported (Amp reads AGENTS.md from the repo)"
     echo "  Installing to project scope instead."
   fi
 
@@ -215,7 +217,7 @@ install_amp() {
 }
 
 install_all() {
-  local scope="${1:-personal}"
+  local scope="${1:-user}"
   echo "Installing sandshell for all supported agents..."
   echo ""
   install_claude "$scope"
@@ -232,7 +234,13 @@ install_all() {
 # ─── Dispatch ────────────────────────────────────────────────────────
 
 AGENT="${1:-help}"
-SCOPE="${2:-personal}"
+SCOPE="${2:-user}"
+
+# Accept legacy alias 'personal' → 'user'.
+if [[ "$SCOPE" = "personal" ]]; then
+  echo "Note: 'personal' is the legacy name for 'user' — both still accepted." >&2
+  SCOPE="user"
+fi
 
 case "$AGENT" in
   claude)  install_claude "$SCOPE" ;;

@@ -5,7 +5,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 usage() {
-  echo "Usage: setup.sh [personal|project] [--profile=default|node|python|minimal] [--strict]"
+  echo "Usage: setup.sh [user|project] [--profile=default|node|python] [--strict]"
   echo ""
   echo "Configures the supported sandshell release path in one command:"
   echo ""
@@ -13,16 +13,18 @@ usage() {
   echo "  2. Claude Code Bash guard + audit hooks"
   echo ""
   echo "Options:"
-  echo "  personal         Install to ~/.claude/settings.json (default)"
+  echo "  user             Install to ~/.claude/settings.json (default; was 'personal' in v0.1)"
   echo "  project          Install to .claude/settings.json"
-  echo "  --profile=NAME   Network profile: default, node, python, minimal"
+  echo "  --profile=NAME   Network profile: default, node, python"
   echo "  --strict         Also deny reads to ~/.ssh, ~/.aws, ~/.kube, etc."
   echo "  --skip-sandbox   Skip native sandbox setup"
   echo "  --skip-hooks     Skip audit hooks setup"
+  echo ""
+  echo "Legacy scope names accepted: 'personal' (alias for 'user')."
   exit 0
 }
 
-SCOPE="personal"
+SCOPE="user"
 PROFILE="default"
 EXTRA_ARGS=""
 SKIP_SANDBOX=false
@@ -30,7 +32,12 @@ SKIP_HOOKS=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    personal|project) SCOPE="$1"; shift ;;
+    user|project) SCOPE="$1"; shift ;;
+    personal)
+      SCOPE="user"
+      echo "Note: 'personal' is the legacy name for 'user' — both still accepted." >&2
+      shift
+      ;;
     --profile=*)      PROFILE="${1#*=}"; EXTRA_ARGS="$EXTRA_ARGS $1"; shift ;;
     --strict)         EXTRA_ARGS="$EXTRA_ARGS --strict"; shift ;;
     --skip-sandbox)   SKIP_SANDBOX=true; shift ;;

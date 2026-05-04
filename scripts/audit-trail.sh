@@ -132,7 +132,7 @@ case "${1:-help}" in
   show)    shift; cmd_show "$@" ;;
   summary) shift; cmd_summary "$@" ;;
   *)
-    echo "Usage: audit.sh <init|log|show|summary> <session-id> [data]"
+    echo "Usage: audit-trail.sh <init|log|show|summary> <session-id> [data]"
     exit 1
     ;;
 esac

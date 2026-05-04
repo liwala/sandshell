@@ -1,0 +1,127 @@
+#!/usr/bin/env bash
+# sandshell — top-level CLI dispatcher
+#
+# Routes verbs to scripts in ../scripts. Existing scripts remain directly
+# invokable; this dispatcher is sugar over them.
+set -euo pipefail
+
+BIN_DIR="$(cd "$(dirname "$0")" && pwd)"
+SANDSHELL_ROOT="$(cd "$BIN_DIR/.." && pwd)"
+SCRIPTS_DIR="$SANDSHELL_ROOT/scripts"
+
+VERSION="0.2.0"
+
+usage() {
+  cat <<EOF
+Usage: sandshell <verb> [args]
+
+Verbs:
+  detect    Report host inventory: OS, deps, agents installed
+  audit     Audit safety configs across detected agents (--json, --summary)
+  verify    Re-run audit; exit 2 on findings >= medium (for CI / pre-commit)
+  apply     Apply safe defaults. Forms:
+              sandshell apply                  # all detected agents
+              sandshell apply claude [user|project]  # Claude Code only
+              sandshell apply codex            # Codex only
+              sandshell apply gemini [user|project]  # Gemini only
+            Legacy: 'personal' (alias for 'user') and 'workspace' (alias for 'project') still accepted.
+
+Options:
+  -h, --help     Show this message
+  --version      Show version
+
+Run 'sandshell <verb> --help' for verb-specific help.
+
+The underlying scripts in $SCRIPTS_DIR/ remain directly invokable.
+EOF
+}
+
+if [[ $# -eq 0 ]]; then
+  usage
+  exit 0
+fi
+
+verb="$1"
+shift
+
+case "$verb" in
+  -h|--help|help)
+    usage
+    ;;
+  --version|version)
+    echo "sandshell $VERSION"
+    ;;
+  detect)
+    exec "$SCRIPTS_DIR/detect.sh" "$@"
+    ;;
+  apply)
+    # apply <agent> dispatches to that agent's setup script.
+    # Backward compat: apply [personal|project] [--profile=...] still routes
+    # to setup.sh (Claude Code), since v0.1 used that form.
+    target="${1:-}"
+    case "$target" in
+      claude)
+        shift
+        exec "$SCRIPTS_DIR/setup.sh" "$@"
+        ;;
+      codex)
+        shift
+        exec "$SCRIPTS_DIR/setup-codex.sh" "$@"
+        ;;
+      gemini)
+        shift
+        exec "$SCRIPTS_DIR/setup-gemini.sh" "$@"
+        ;;
+      ""|all)
+        # Apply to every detected agent. detect.sh emits agent_<name>=installed
+        # lines; we run the matching setup for each.
+        if [[ "$target" == "all" ]]; then shift; fi
+        applied_any=false
+        if command -v claude >/dev/null 2>&1 || [[ -d "$HOME/.claude" ]]; then
+          echo "=== Applying to Claude Code ==="
+          "$SCRIPTS_DIR/setup.sh" "$@" || true
+          applied_any=true
+          echo
+        fi
+        if command -v codex >/dev/null 2>&1 || [[ -d "$HOME/.codex" ]]; then
+          echo "=== Applying to Codex ==="
+          "$SCRIPTS_DIR/setup-codex.sh" || true
+          applied_any=true
+          echo
+        fi
+        if command -v gemini >/dev/null 2>&1 || [[ -d "$HOME/.gemini" ]]; then
+          echo "=== Applying to Gemini ==="
+          "$SCRIPTS_DIR/setup-gemini.sh" || true
+          applied_any=true
+          echo
+        fi
+        if [[ "$applied_any" != true ]]; then
+          echo "No supported agents detected. Run 'sandshell detect' for inventory." >&2
+          exit 1
+        fi
+        ;;
+      user|project|personal|workspace|--*)
+        # Bare-scope form: apply [user|project] [--profile=...] [--strict]
+        # routes to Claude (the default agent for legacy compat).
+        # 'personal'/'workspace' are accepted as legacy aliases by setup.sh.
+        exec "$SCRIPTS_DIR/setup.sh" "$@"
+        ;;
+      *)
+        echo "sandshell apply: unknown target '$target'" >&2
+        echo "Use: claude | codex | gemini | all (default)" >&2
+        exit 1
+        ;;
+    esac
+    ;;
+  audit)
+    exec "$SCRIPTS_DIR/audit-config.sh" "$@"
+    ;;
+  verify)
+    exec "$SCRIPTS_DIR/audit-config.sh" --strict "$@"
+    ;;
+  *)
+    echo "sandshell: unknown verb '$verb'" >&2
+    echo "Run 'sandshell help' for usage." >&2
+    exit 1
+    ;;
+esac

@@ -16,7 +16,7 @@ Pure bash + markdown project. No build system, no compiled language.
   - `setup-hooks.sh` — configure Claude Bash guard + audit hooks
   - `uninstall.sh` — rollback Claude settings/hooks and optional agent installs
   - `release-check.sh` — maintainer smoke test
-  - `audit.sh` — JSONL audit trail
+  - `audit-trail.sh` — JSONL audit trail
   - `hook-pre-bash.sh` — narrow PreToolUse guard
   - `hook-post-bash.sh` — PostToolUse Bash logger
 - `profiles/` — native sandbox network allowlists

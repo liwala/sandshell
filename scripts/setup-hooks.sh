@@ -6,14 +6,20 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 HOOK_SCRIPT="$SCRIPT_DIR/hook-post-bash.sh"
 GUARD_SCRIPT="$SCRIPT_DIR/hook-pre-bash.sh"
 
-# Determine where to install — personal or project scope
-SCOPE="${1:-personal}"
+# Determine where to install — user (home dir) or project (repo) scope
+SCOPE="${1:-user}"
+
+# Accept legacy alias 'personal' → 'user'.
+if [[ "$SCOPE" = "personal" ]]; then
+  echo "Note: 'personal' is the legacy name for 'user' — both still accepted." >&2
+  SCOPE="user"
+fi
 
 case "$SCOPE" in
-  personal)
+  user)
     SETTINGS_DIR="$HOME/.claude"
     SETTINGS_FILE="$SETTINGS_DIR/settings.json"
-    echo "Installing sandshell hooks (personal scope: all projects)"
+    echo "Installing sandshell hooks (user scope: all projects)"
     ;;
   project)
     SETTINGS_DIR=".claude"
@@ -21,17 +27,19 @@ case "$SCOPE" in
     echo "Installing sandshell hooks (project scope: this project only)"
     ;;
   --help|-h|help)
-    echo "Usage: setup-hooks.sh [personal|project]"
+    echo "Usage: setup-hooks.sh [user|project]"
     echo ""
-    echo "  personal  Install to ~/.claude/settings.json (default)"
+    echo "  user      Install to ~/.claude/settings.json (default; was 'personal' in v0.1)"
     echo "  project   Install to .claude/settings.json"
+    echo ""
+    echo "Legacy scope names accepted: 'personal' (alias for 'user')."
     echo ""
     echo "This configures PreToolUse/PostToolUse hooks on Bash commands."
     echo "The pre-hook blocks non-approved host commands; the post-hook logs them."
     exit 0
     ;;
   *)
-    echo "Unknown scope: $SCOPE. Use 'personal' or 'project'." >&2
+    echo "Unknown scope: $SCOPE. Use 'user' or 'project'." >&2
     exit 1
     ;;
 esac
@@ -118,7 +126,7 @@ echo "What this does:"
 echo "  - Blocks obvious sandbox-disabling Bash commands before execution"
 echo "  - Logs every Bash command the agent runs on the host"
 echo "  - Classifies commands (git, github_cli, sandshell, read_only, unclassified)"
-echo "  - Skips direct audit.sh self-logging"
+echo "  - Skips direct audit-trail.sh self-logging"
 echo "  - Writes to ~/.sandshell/audit/<session>.jsonl"
 echo ""
 echo "To remove, edit $SETTINGS_FILE and delete the sandshell PreToolUse/PostToolUse entries."

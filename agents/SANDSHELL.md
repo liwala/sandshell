@@ -37,6 +37,6 @@ If this repo includes sandshell audit helpers, you may log notable
 trust-boundary decisions:
 
 ```bash
-__SANDSHELL_DIR__/scripts/audit.sh log SESSION_ID \
+__SANDSHELL_DIR__/scripts/audit-trail.sh log SESSION_ID \
   '{"op":"decision","choice":"host","reason":"git push requires host credentials"}'
 ```

@@ -11,9 +11,14 @@ release path.
 os=darwin
 arch=arm64
 native_sandbox=seatbelt
-cc_sandbox_configured=true
-audit_hooks_configured=true
-bash_guard_configured=true
+dep_jq=present
+dep_python3=3.13
+dep_tomllib=available
+agent_claude=installed
+agent_codex=installed
+agent_gemini=absent
+agent_amp=absent
+# For safety evaluation: ~/sandshell/bin/sandshell audit
 ```
 
 This means:
@@ -50,7 +55,7 @@ With hooks enabled, Bash invocations are logged to the sandshell audit trail.
 ## 4. Audit review
 
 ```bash
-audit.sh summary a1b2c3d4
+audit-trail.sh summary a1b2c3d4
 ```
 
 Example output:
