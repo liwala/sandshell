@@ -213,9 +213,13 @@ check_sandbox_deny_disable_flag() {
 }
 
 # ---------- cc.sandbox.strict_reads ----------
-# Info per scope: filesystem.denyRead should include common credential paths.
+# Info — aggregated across scopes: filesystem.denyRead should include common
+# credential paths. The fix (sandshell apply --strict) is identical regardless
+# of which scopes are missing it, so we surface a single finding listing all
+# affected scopes rather than one finding per scope (which read as duplicates).
 check_sandbox_strict_reads() {
   local scope path
+  local missing_scopes=()
   while read -r scope path; do
     jq -e '.sandbox.enabled == true' "$path" >/dev/null 2>&1 || continue
     if ! jq -e '
@@ -223,14 +227,25 @@ check_sandbox_strict_reads() {
       | map(select(test("\\.ssh|\\.aws|\\.gnupg|\\.kube"; "i")))
       | length > 0
     ' "$path" >/dev/null 2>&1; then
-      emit_finding \
-        "cc.sandbox.strict_reads" \
-        "info" \
-        "Sandbox in $scope scope does not deny reads to credential directories (~/.ssh, ~/.aws, etc.)" \
-        "$path" \
-        "sandshell apply --strict"
+      missing_scopes+=("$scope")
     fi
   done < <(existing_scopes)
+
+  if [[ "${#missing_scopes[@]}" -gt 0 ]]; then
+    # Build a ", "-joined list (IFS only uses the first char with ${arr[*]},
+    # so we can't do this in one expansion — loop instead).
+    local scope_list="" s
+    for s in "${missing_scopes[@]}"; do
+      [[ -n "$scope_list" ]] && scope_list+=", "
+      scope_list+="$s"
+    done
+    emit_finding \
+      "cc.sandbox.strict_reads" \
+      "info" \
+      "Sandbox does not deny reads to credential directories (~/.ssh, ~/.aws, etc.) in: $scope_list" \
+      "" \
+      "sandshell apply --strict"
+  fi
 }
 
 # ---------- cc.permissions.no_wildcard_bash ----------

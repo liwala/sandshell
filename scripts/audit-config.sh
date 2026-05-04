@@ -77,7 +77,7 @@ shopt -u nullglob
 
 # Format and emit
 python3 - "$findings_file" "$JSON_OUTPUT" "$STRICT" "$SUMMARY" "${ran_adapters[*]:-}" <<'PY'
-import json, sys
+import json, os, sys
 from datetime import datetime, timezone
 
 findings_path = sys.argv[1]
@@ -88,6 +88,30 @@ ran_adapters = sys.argv[5].split() if len(sys.argv) > 5 else []
 
 SEVERITY_ORDER = {"critical": 0, "high": 1, "medium": 2, "info": 3}
 ACTIONABLE = {"critical", "high", "medium"}
+
+# Colorize human output when stdout is a TTY and NO_COLOR is unset.
+# https://no-color.org/ — respect the env var.
+USE_COLOR = sys.stdout.isatty() and not os.environ.get("NO_COLOR")
+COLORS = {
+    "reset":    "\033[0m",
+    "bold":     "\033[1m",
+    "dim":      "\033[2m",
+    "critical": "\033[1;31m",  # bold red
+    "high":     "\033[1;33m",  # bold yellow
+    "medium":   "\033[1;34m",  # bold blue
+    "info":     "\033[2;37m",  # dim white
+}
+def c(name, text):
+    if not USE_COLOR:
+        return text
+    return f"{COLORS[name]}{text}{COLORS['reset']}"
+
+# Replace $HOME with ~ in a path-like string for display compactness.
+HOME = os.environ.get("HOME", "")
+def shorten(s):
+    if not isinstance(s, str) or not HOME:
+        return s
+    return s.replace(HOME, "~") if s.startswith(HOME) else s
 
 # Map a finding ID prefix (the part before the first dot) to the adapter
 # directory name. Most are 1:1; cc.* is the exception (claude adapter emits
@@ -167,16 +191,16 @@ else:
             if sev not in by_sev:
                 continue
             count = len(by_sev[sev])
-            print(f"{sev.upper()} ({count})")
+            print(c(sev, f"{sev.upper()} ({count})"))
             for f in by_sev[sev]:
-                print(f"  {f['id']}")
-                print(f"    {f['title']}")
+                print(f"  {c('bold', f['id'])}")
+                print(f"    {shorten(f['title'])}")
                 if f.get("scope"):
-                    print(f"    scope: {f['scope']}")
+                    print(f"    scope: {shorten(f['scope'])}")
                 if f.get("fix"):
-                    print(f"    fix:   {f['fix']}")
+                    print(f"    fix:   {shorten(f['fix'])}")
                 if f.get("details"):
-                    print(f"    {f['details']}")
+                    print(f"    {c('dim', shorten(f['details']))}")
             print()
 
         actionable = sum(1 for f in findings if f["severity"] in ACTIONABLE)
