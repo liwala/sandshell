@@ -55,7 +55,7 @@ With hooks enabled, Bash invocations are logged to the sandshell audit trail.
 ## 4. Audit review
 
 ```bash
-audit-trail.sh summary a1b2c3d4
+sandshell trail summary a1b2c3d4
 ```
 
 Example output:

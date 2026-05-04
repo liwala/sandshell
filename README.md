@@ -187,9 +187,12 @@ Profiles control which hosts the sandbox permits.
 Helpers:
 
 ```bash
-~/sandshell/scripts/audit-trail.sh show <session-id>
-~/sandshell/scripts/audit-trail.sh summary <session-id>
+sandshell trail list                    # enumerate logged sessions, most recent first
+sandshell trail show <session-id>       # display every Bash command in a session
+sandshell trail summary <session-id>    # roll-up classification of a session
 ```
+
+(Or call `~/sandshell/scripts/audit-trail.sh ...` directly if you prefer.)
 
 This is *retrospective* data, separate from `sandshell audit` (which is
 *pre-flight* config audit). Both are useful; they answer different questions.

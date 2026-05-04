@@ -37,6 +37,10 @@ Verbs:
                    sandshell uninstall                # default user scope
                    sandshell uninstall project        # remove project-scope configs
                    sandshell uninstall user --remove-agent-installs   # also remove skills/instruction docs
+  trail          Inspect the PostToolUse Bash audit trail (per Claude Code session).
+                   sandshell trail list                # enumerate logged sessions
+                   sandshell trail show <session-id>   # display a session's commands
+                   sandshell trail summary <session-id># classify and roll up a session
 
 Options:
   -h, --help     Show this message
@@ -71,6 +75,9 @@ case "$verb" in
     ;;
   uninstall)
     exec "$SCRIPTS_DIR/uninstall.sh" "$@"
+    ;;
+  trail)
+    exec "$SCRIPTS_DIR/audit-trail.sh" "$@"
     ;;
   apply)
     # apply <agent> dispatches to that agent's setup script.

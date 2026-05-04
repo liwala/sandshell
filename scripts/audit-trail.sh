@@ -124,15 +124,102 @@ if unclassified:
 "
 }
 
+cmd_list() {
+  if [[ ! -d "$AUDIT_DIR" ]]; then
+    echo "No audit trail directory at $AUDIT_DIR (no sessions logged yet)."
+    return 0
+  fi
+  shopt -s nullglob
+  local files=("$AUDIT_DIR"/*.jsonl)
+  shopt -u nullglob
+  if [[ "${#files[@]}" -eq 0 ]]; then
+    echo "No sessions in $AUDIT_DIR yet."
+    echo "(Sandshell's PostToolUse hook writes one .jsonl per Claude Code session"
+    echo " once 'sandshell apply' has wired up the hooks.)"
+    return 0
+  fi
+
+  python3 - "$AUDIT_DIR" <<'PY'
+import json, os, sys, glob
+from datetime import datetime
+
+audit_dir = sys.argv[1]
+rows = []
+for path in glob.glob(os.path.join(audit_dir, "*.jsonl")):
+    session_id = os.path.basename(path).removesuffix(".jsonl")
+    started = ""
+    last = ""
+    count = 0
+    try:
+        with open(path) as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                count += 1
+                try:
+                    obj = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                ts = obj.get("ts", "")
+                if not started and ts:
+                    started = ts
+                if ts:
+                    last = ts
+    except OSError:
+        continue
+    # Sort key: most-recent activity first.
+    sort_key = last or started or ""
+    rows.append((sort_key, session_id, started, last, count))
+
+rows.sort(reverse=True)
+
+if not rows:
+    print("No sessions found.")
+    sys.exit(0)
+
+# Pretty table.
+print(f"{'SESSION':<12}  {'STARTED':<20}  {'LAST ACTIVE':<20}  {'EVENTS':>6}")
+for _, sid, started, last, count in rows:
+    print(f"{sid[:12]:<12}  {started:<20}  {last:<20}  {count:>6}")
+
+print()
+print(f"{len(rows)} session(s) in {audit_dir}")
+print("Show:    sandshell trail show    <session>")
+print("Summary: sandshell trail summary <session>")
+PY
+}
+
+usage() {
+  cat <<EOF
+Usage: audit-trail.sh <command> [args]
+
+Commands:
+  list                       Enumerate logged sessions, most recent first
+  show    <session-id>       Display the audit trail for a session
+  summary <session-id>       Roll-up classification of a session
+  init    <session-id>       Initialize a session log (used by hooks)
+  log     <session-id> JSON  Append a JSON entry to a session log
+
+Audit trail location: \$SANDSHELL_AUDIT_DIR (default: ~/.sandshell/audit)
+
+Sessions are written automatically by the PostToolUse Bash hook configured
+by 'sandshell apply'. Run 'sandshell trail list' to discover session ids.
+EOF
+}
+
 # ─── Dispatch ────────────────────────────────────────────────────────
 
 case "${1:-help}" in
+  list|ls) shift; cmd_list ;;
   init)    shift; cmd_init "$@" ;;
   log)     shift; cmd_log "$@" ;;
   show)    shift; cmd_show "$@" ;;
   summary) shift; cmd_summary "$@" ;;
+  -h|--help|help) usage ;;
   *)
-    echo "Usage: audit-trail.sh <init|log|show|summary> <session-id> [data]"
+    echo "Unknown command: $1" >&2
+    usage >&2
     exit 1
     ;;
 esac
