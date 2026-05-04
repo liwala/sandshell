@@ -16,15 +16,23 @@ usage() {
 Usage: sandshell <verb> [args]
 
 Verbs:
-  detect    Report host inventory: OS, deps, agents installed
-  audit     Audit safety configs across detected agents (--json, --summary)
-  verify    Re-run audit; exit 2 on findings >= medium (for CI / pre-commit)
-  apply     Apply safe defaults. Forms:
-              sandshell apply                  # all detected agents
-              sandshell apply claude [user|project]  # Claude Code only
-              sandshell apply codex            # Codex only
-              sandshell apply gemini [user|project]  # Gemini only
-            Legacy: 'personal' (alias for 'user') and 'workspace' (alias for 'project') still accepted.
+  detect         Report host inventory: OS, deps, agents installed
+  install-agent  Install sandshell skill / instruction docs into detected
+                 agents. One-time setup; idempotent.
+                   sandshell install-agent all
+                   sandshell install-agent claude [user|project]
+                   sandshell install-agent codex  [user|project]
+                   sandshell install-agent gemini [user|project]
+                   sandshell install-agent amp
+                   sandshell install-agent generic project
+  audit          Audit safety configs across detected agents (--json, --summary)
+  verify         Re-run audit; exit 2 on findings >= medium (for CI / pre-commit)
+  apply          Apply safe-default *configs*. Forms:
+                   sandshell apply                          # all detected agents
+                   sandshell apply claude [user|project]    # Claude Code only
+                   sandshell apply codex                    # Codex only
+                   sandshell apply gemini [user|project]    # Gemini only
+                 Legacy scope names accepted: 'personal' (= 'user'), 'workspace' (= 'project').
 
 Options:
   -h, --help     Show this message
@@ -53,6 +61,9 @@ case "$verb" in
     ;;
   detect)
     exec "$SCRIPTS_DIR/detect.sh" "$@"
+    ;;
+  install-agent)
+    exec "$SCRIPTS_DIR/install-agent.sh" "$@"
     ;;
   apply)
     # apply <agent> dispatches to that agent's setup script.

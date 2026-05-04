@@ -61,7 +61,7 @@ sandshell audit
 
 # 5. Install agent guidance (skill for Claude Code, instruction docs for the
 #    others). One-time setup; idempotent.
-~/sandshell/scripts/install-agent.sh all
+sandshell install-agent all
 
 # 6. Apply safe-default configs to every detected agent (sandbox + hooks for
 #    Claude; safe TOML for Codex; safe JSON for Gemini).
