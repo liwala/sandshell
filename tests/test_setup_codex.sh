@@ -54,6 +54,45 @@ grep -q '^network_access = false' "$merged" \
 grep -q "Managed by sandshell" "$merged" \
   || fail "case3 (merge): sandshell marker comment missing after merge"
 
+# Case 3b: re-apply on a sandshell-managed file that ALSO has user/Codex
+# keys (the situation a user actually ends up in: marker present, but Codex
+# itself wrote [tui.*] settings or the user added [projects.*] over time).
+# Re-apply MUST preserve those — the marker means "we wrote here" not "we
+# own everything in this file". Bug fixed in v0.2.0 polish; regression test.
+mkdir -p "$TMPDIR_TEST/case3b/.codex"
+cat > "$TMPDIR_TEST/case3b/.codex/config.toml" <<'EOF'
+# Managed by sandshell — old marker text from earlier version
+
+sandbox_mode = "workspace-write"
+approval_policy = "on-request"
+
+[sandbox_workspace_write]
+network_access = false
+writable_roots = ["/tmp/already-trusted"]
+
+[projects."/some/trusted/project"]
+trust_level = "trusted"
+
+[tui.model_availability_nux]
+"gpt-5.5" = 2
+EOF
+HOME="$TMPDIR_TEST/case3b" "$ROOT/scripts/setup-codex.sh" >/dev/null
+managed_with_extras="$TMPDIR_TEST/case3b/.codex/config.toml"
+grep -q '\[projects\."/some/trusted/project"\]' "$managed_with_extras" \
+  || fail "case3b: re-apply lost [projects.\"...\"] (the bug we just fixed)"
+grep -q 'trust_level = "trusted"' "$managed_with_extras" \
+  || fail "case3b: re-apply lost trust_level = \"trusted\""
+grep -q '\[tui\.model_availability_nux\]' "$managed_with_extras" \
+  || fail "case3b: re-apply lost [tui.*] section (Codex-internal setting)"
+grep -q '"/tmp/already-trusted"' "$managed_with_extras" \
+  || fail "case3b: re-apply lost user's writable_roots entries"
+# Re-applying a second time should be idempotent (no further changes).
+sha_before=$(shasum "$managed_with_extras" | awk '{print $1}')
+HOME="$TMPDIR_TEST/case3b" "$ROOT/scripts/setup-codex.sh" >/dev/null
+sha_after=$(shasum "$managed_with_extras" | awk '{print $1}')
+[[ "$sha_before" = "$sha_after" ]] \
+  || fail "case3b: re-apply was not idempotent (file changed on second run)"
+
 # Case 4: --force overwrites the existing non-managed file (drops user keys).
 mkdir -p "$TMPDIR_TEST/case4/.codex"
 cat > "$TMPDIR_TEST/case4/.codex/config.toml" <<'EOF'
