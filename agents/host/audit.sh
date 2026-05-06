@@ -24,14 +24,22 @@ emit_finding() {
 }
 
 # Files we scan for aliases / env-var bypasses / persisted creds.
-# Only files that actually exist are scanned.
+# Only files that actually exist are scanned. Includes cwd `.envrc` because
+# direnv-loaded creds end up in the shell env an agent inherits.
+#
+# Out of scope (would need a runtime probe, not static parsing): launchd
+# user agents (~/Library/LaunchAgents/*.plist + `launchctl setenv`),
+# systemd user units, IDE run configs, macOS keychain hydration, and
+# anything injected by an MCP server / wrapper. We audit the files that
+# would populate a fresh shell, not the live env itself.
 shell_rc_files() {
   local f
   for f in \
     "$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.bash_aliases" \
     "$HOME/.zshrc" "$HOME/.zshenv" "$HOME/.zprofile" "$HOME/.zlogin" \
     "$HOME/.profile" \
-    "$HOME/.config/fish/config.fish" "$HOME/.config/fish/aliases.fish"; do
+    "$HOME/.config/fish/config.fish" "$HOME/.config/fish/aliases.fish" \
+    "$PWD/.envrc"; do
     [[ -f "$f" ]] && echo "$f"
   done
 }
@@ -92,32 +100,157 @@ check_env_bypass_var() {
   done < <(shell_rc_files)
 }
 
-# ---------- host.long_lived_creds ----------
-# Long-lived credentials persisted in shell rc files. Flags export of common
-# long-lived API keys without a paired session-token (which would suggest
-# short-lived credentials).
-check_long_lived_creds() {
+# ---------- host.creds_in_shell_rc ----------
+# Credential-shaped exports persisted in shell rc files, classified by how
+# the value is injected. Static parsing only: we never see the live env
+# (launchd, IDE, keychain, parent processes), so we can't claim a credential
+# is "long-lived" — only that it's materialized as a literal in a file the
+# shell sources, vs. fetched at session start from a known secrets manager.
+#
+# Classification of the RHS:
+#   literal       — raw or quoted constant value           → emit medium
+#   vault:<tool>  — $(op …), $(aws-vault …), $(vault …),   → silent
+#                   $(pass …), $(bw …), $(chamber …),
+#                   $(infisical …), $(lpass …), $(sops …),
+#                   $(teller …), $(security …),
+#                   $(keyring …), $(gcloud secrets …)
+#   unknown:*     — backticks, $VAR forwarding,            → emit info
+#                   or $(unrecognized-cmd ...)
+
+# Returns one of: "literal", "vault:<tool>", "unknown:command",
+# "unknown:varref", "empty". Stdout-only.
+classify_cred_rhs() {
+  local rhs="$1"
+  rhs="$(echo "$rhs" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
+  # Strip ONE leading quote if the value is wrapped — we still scan inside.
+  case "$rhs" in
+    \"*) rhs="${rhs#\"}" ;;
+    \'*) rhs="${rhs#\'}" ;;
+  esac
+
+  if [[ -z "$rhs" || "$rhs" == \"\" || "$rhs" == \'\' ]]; then
+    echo "empty"
+    return
+  fi
+
+  # Backtick command substitution. We don't try to classify which tool —
+  # backticks are uncommon enough today that "unknown" is fine.
+  if [[ "$rhs" =~ ^\` ]]; then
+    echo "unknown:command"
+    return
+  fi
+
+  # $(...) command substitution.
+  if [[ "$rhs" =~ ^\$\([[:space:]]*([A-Za-z][A-Za-z0-9_-]*) ]]; then
+    local cmd="${BASH_REMATCH[1]}"
+    case "$cmd" in
+      op|aws-vault|vault|pass|bw|chamber|infisical|lpass|sops|teller|security|keyring|gh|glab)
+        echo "vault:$cmd"
+        return
+        ;;
+      gcloud)
+        # gcloud auth print-access-token (short-lived) and gcloud secrets
+        # versions access (vault read) are both safe.
+        if [[ "$rhs" =~ ^\$\([[:space:]]*gcloud[[:space:]]+(secrets|auth) ]]; then
+          echo "vault:gcloud-${BASH_REMATCH[1]}"
+          return
+        fi
+        ;;
+      az)
+        # az account get-access-token returns a short-lived MSAL token.
+        if [[ "$rhs" =~ ^\$\([[:space:]]*az[[:space:]]+account[[:space:]]+get-access-token ]]; then
+          echo "vault:az-token"
+          return
+        fi
+        ;;
+      aws)
+        # aws sts get-session-token / get-caller-identity are short-lived.
+        if [[ "$rhs" =~ ^\$\([[:space:]]*aws[[:space:]]+sts ]]; then
+          echo "vault:aws-sts"
+          return
+        fi
+        ;;
+    esac
+    echo "unknown:command"
+    return
+  fi
+
+  # ${VAR} or $VAR forwarding from another env var. Could be a vault tool
+  # exporting it earlier, could be a literal in another file — we can't tell.
+  if [[ "$rhs" =~ ^\$\{ ]] || [[ "$rhs" =~ ^\$[A-Za-z_] ]]; then
+    echo "unknown:varref"
+    return
+  fi
+
+  echo "literal"
+}
+
+check_creds_in_shell_rc() {
   local cred_vars='AWS_ACCESS_KEY_ID|OPENAI_API_KEY|ANTHROPIC_API_KEY|GITHUB_TOKEN|GH_TOKEN|GOOGLE_API_KEY'
 
   while IFS= read -r rc; do
     while IFS=: read -r lineno content; do
       [[ -z "$content" ]] && continue
       [[ "$content" =~ ^[[:space:]]*# ]] && continue
-      local var
-      var=$(echo "$content" | grep -oE "(export[[:space:]]+)?($cred_vars)=" | head -1 | sed -E 's/^(export[[:space:]]+)?//; s/=$//')
-      [[ -z "$var" ]] && continue
-      # AWS: if AWS_SESSION_TOKEN is also exported in the same rc, treat as
-      # short-lived (STS / SSO). Skip the warning.
-      if [[ "$var" == "AWS_ACCESS_KEY_ID" ]] && grep -qE "(export[[:space:]]+)?AWS_SESSION_TOKEN=" "$rc" 2>/dev/null; then
+
+      # Pull out the variable name and the raw RHS.
+      local var rhs
+      if [[ "$content" =~ (^|[[:space:]])(export[[:space:]]+)?($cred_vars)=(.*)$ ]]; then
+        var="${BASH_REMATCH[3]}"
+        rhs="${BASH_REMATCH[4]}"
+      else
         continue
       fi
-      emit_finding \
-        "host.long_lived_creds" \
-        "high" \
-        "Long-lived credential persisted in shell rc: $var" \
-        "$rc:$lineno" \
-        "Use short-lived tokens (STS, SSO, gh auth login) or load from a secrets manager at session start" \
-        "Long-lived credentials in env give the agent persistent access to those services. Prefer ephemeral credentials, a separate user account for agent work, or sandshell's --strict mode to deny credential file reads."
+
+      # AWS: if AWS_SESSION_TOKEN is paired in the same file, the credential
+      # is STS/SSO (short-lived) regardless of how it was injected. Skip.
+      if [[ "$var" == "AWS_ACCESS_KEY_ID" ]] && \
+         grep -qE "(export[[:space:]]+)?AWS_SESSION_TOKEN=" "$rc" 2>/dev/null; then
+        continue
+      fi
+
+      # Trim a trailing inline comment (best-effort; doesn't account for
+      # comments inside quoted values, but classification only inspects the
+      # leading characters).
+      rhs="${rhs%%#*}"
+
+      local kind; kind="$(classify_cred_rhs "$rhs")"
+      case "$kind" in
+        literal)
+          emit_finding \
+            "host.creds_in_shell_rc" \
+            "medium" \
+            "Plaintext credential in shell rc: $var" \
+            "$rc:$lineno" \
+            "Load via a secrets manager (op, aws-vault, vault, pass, chamber, infisical, gcloud secrets) at session start, or move to a per-project .envrc that doesn't auto-load into every shell." \
+            "source: literal value. Materialized in $rc, this credential ends up in every shell's environment — including any agent your shell launches."
+          ;;
+        vault:*)
+          # Loaded via a known secrets manager — no finding. (Detected: ${kind#vault:}.)
+          continue
+          ;;
+        unknown:command)
+          emit_finding \
+            "host.creds_in_shell_rc" \
+            "info" \
+            "Credential injection source not recognized: $var" \
+            "$rc:$lineno" \
+            "Verify the substitution invokes a secrets manager (op, aws-vault, vault, pass, bw, chamber, infisical, sops, teller, gcloud secrets). If it's a custom wrapper, this is fine; if it reads a literal from disk, treat it as plaintext." \
+            "source: command substitution from an unrecognized tool."
+          ;;
+        unknown:varref)
+          emit_finding \
+            "host.creds_in_shell_rc" \
+            "info" \
+            "Credential forwarded from another variable: $var" \
+            "$rc:$lineno" \
+            "Trace where the source variable is defined. If it's loaded from a secrets manager at session start, this is fine; if it's a literal in another file, that file is the real exposure." \
+            "source: \$VAR forwarding — sandshell can't see the upstream definition statically."
+          ;;
+        empty)
+          continue
+          ;;
+      esac
     done < <(grep -nE "(export[[:space:]]+)?($cred_vars)=" "$rc" 2>/dev/null || true)
   done < <(shell_rc_files)
 }
@@ -203,7 +336,7 @@ check_repo_provenance() {
 # Run all checks. Each emits zero or more findings; aggregate to stdout.
 check_shell_alias_bypass
 check_env_bypass_var
-check_long_lived_creds
+check_creds_in_shell_rc
 check_native_sandbox_available
 check_cwd_is_git_repo
 check_repo_provenance

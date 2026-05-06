@@ -93,22 +93,24 @@ CRITICAL (1)
     Claude Code sandbox is not enabled in any settings scope
     fix:   sandshell apply --profile=default
 
-HIGH (2)
+HIGH (1)
   host.shell_alias_bypass
     Alias 'claude' includes bypass flag '--dangerously-skip-permissions'
     scope: ~/.zshrc:42
     fix:   Remove '--dangerously-skip-permissions' from the alias in ~/.zshrc
-  host.long_lived_creds
-    Long-lived credential persisted in shell rc: AWS_ACCESS_KEY_ID
-    scope: ~/.zshrc:18
-    fix:   Use short-lived tokens (STS, SSO, gh auth login)
 
-MEDIUM (1)
+MEDIUM (2)
   cc.hooks.pre_bash
     Claude Code PreToolUse Bash guard hook is not configured
     fix:   sandshell apply
+  host.creds_in_shell_rc
+    Plaintext credential in shell rc: OPENAI_API_KEY
+    scope: ~/.zshrc:18
+    fix:   Load via a secrets manager (op, aws-vault, vault, pass, chamber, infisical, gcloud secrets) at session start, or move to a per-project .envrc that doesn't auto-load into every shell.
+    source: literal value. Materialized in ~/.zshrc, this credential ends up in every shell's environment — including any agent your shell launches.
 
-3 actionable findings (severity >= medium).
+3 actionable findings (severity >= medium). Run `sandshell audit --json`
+for machine-readable output.
 
 Drift since 2026-04-23T11:08:02Z: +1 new / -0 resolved
   + cc.hooks.pre_bash  (medium)  Claude Code PreToolUse Bash guard hook is not configured
@@ -125,7 +127,7 @@ real configuration files and emits findings. Coverage at a glance:
 
 | Adapter      | Surface                                                                                                                                            |
 |--------------|----------------------------------------------------------------------------------------------------------------------------------------------------|
-| `host`       | Cross-agent: bypass aliases (`--dangerously-skip-permissions`, `--full-auto`, `--yolo`), bypass env vars, long-lived creds, missing native sandbox primitive, non-git cwd, unknown repo provenance |
+| `host`       | Cross-agent: bypass aliases (`--dangerously-skip-permissions`, `--full-auto`, `--yolo`), bypass env vars, plaintext creds in shell rc / `.envrc` (classified by injection source — `$(op …)`, `$(aws-vault …)`, `$(vault …)`, `$(gh auth token)`, etc. are silent; literal values flagged), missing native sandbox primitive, non-git cwd, unknown repo provenance |
 | `claude`     | Sandbox enabled (and the silent-disable trap), write/network scope, dangerouslyDisableSandbox deny entry, wildcard Bash permissions, curl-pipe-shell patterns, PreToolUse/PostToolUse hooks, MCP curation against your allowlist, project auto-approve |
 | `codex`      | `sandbox_mode != danger-full-access`, `approval_policy != never`, no broad `writable_roots`, no `trust_level = "trusted"` for `~`/`/`, network-access in workspace mode |
 | `gemini`     | `tools.sandbox` configured, `sandboxNetworkAccess`, `security.folderTrust.enabled`, `security.disableYoloMode`, approval mode, broad entries in `trustedFolders.json` |
@@ -263,7 +265,7 @@ prompts can't:
 | Bypass flags persisted in shell aliases       | `audit` parses shell rc files for `--dangerously-skip-permissions`, `--full-auto`, `--yolo`, etc. |
 | Wildcard Bash permissions                    | `audit` flags `Bash`, `Bash(*)`, and curl-pipe-shell patterns                                     |
 | Untrusted MCP servers                        | `audit` cross-references your MCP config against `~/.sandshell/known-mcps.json`                   |
-| Long-lived credentials in agent's environment | `audit` flags persistent credential exports; `apply --strict` adds read-deny for credential paths |
+| Plaintext credentials in shell rc / `.envrc` | `audit` parses each cred export and classifies the injection source — silent for known secret managers (`op`, `aws-vault`, `vault`, `pass`, `chamber`, `infisical`, `gh auth token`, `gcloud secrets`, etc.), medium for literal values; `apply --strict` adds read-deny for credential paths |
 | Untracked host-side Bash activity            | PostToolUse hook records every command for retrospective review                                   |
 | Filesystem writes outside the repo            | Native sandbox enforces filesystem bounds (Seatbelt on macOS, bubblewrap on Linux)                |
 
