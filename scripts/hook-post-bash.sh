@@ -17,7 +17,10 @@ fi
 
 session_id=$(echo "$input" | jq -r '.session_id // empty')
 command_str=$(echo "$input" | jq -r '.tool_input.command // empty')
-exit_code=$(echo "$input" | jq -r '.tool_response.exitCode // empty')
+# Claude uses tool_response.exitCode (camelCase); Codex's docs don't pin
+# the inner key name. Read both so the audit trail records the exit code
+# regardless of which agent fired the hook.
+exit_code=$(echo "$input" | jq -r '.tool_response.exitCode // .tool_response.exit_code // empty')
 
 # Skip if no session or command
 [[ -z "$session_id" || -z "$command_str" ]] && exit 0

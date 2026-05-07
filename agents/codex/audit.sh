@@ -148,4 +148,65 @@ if isinstance(projects, dict):
              scope=config_path,
              fix="Remove entries you no longer need",
              details="Trusted: " + ", ".join(trusted_paths))
+
+# ---------- codex.hooks.* ----------
+# Codex's hook system mirrors Claude's (see developers.openai.com/codex/hooks):
+# PreToolUse + PostToolUse with the same JSON-on-stdin shape. Sandshell ships
+# matching hook scripts at scripts/hook-{pre,post}-bash.sh and a setup script
+# at scripts/setup-codex-hooks.sh. Audit flags missing hooks (mirror of
+# cc.hooks.pre_bash / cc.hooks.post_bash) and the feature-flag silent-disable
+# trap: a hooks.json with sandshell entries is dead code if [features]
+# codex_hooks = true is missing from config.toml.
+hooks_path = os.path.join(os.path.dirname(config_path), "hooks.json")
+
+def _hooks_for_event(hooks_cfg, event_name):
+    h = hooks_cfg.get("hooks", {}) if isinstance(hooks_cfg, dict) else {}
+    return h.get(event_name, []) if isinstance(h, dict) else []
+
+def _has_sandshell_hook(event_entries, script_basename):
+    """True if any hook entry references a script whose basename matches."""
+    for entry in event_entries:
+        if not isinstance(entry, dict):
+            continue
+        for h in entry.get("hooks", []) or []:
+            cmd = h.get("command", "") if isinstance(h, dict) else ""
+            if isinstance(cmd, str) and script_basename in cmd:
+                return True
+    return False
+
+hooks_cfg = None
+if os.path.exists(hooks_path):
+    try:
+        with open(hooks_path) as f:
+            hooks_cfg = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        hooks_cfg = None
+
+pre_events  = _hooks_for_event(hooks_cfg or {}, "PreToolUse")
+post_events = _hooks_for_event(hooks_cfg or {}, "PostToolUse")
+has_pre  = _has_sandshell_hook(pre_events,  "hook-pre-bash.sh")
+has_post = _has_sandshell_hook(post_events, "hook-post-bash.sh")
+
+if not has_pre:
+    emit("codex.hooks.pre_bash", "medium",
+         "Codex PreToolUse Bash guard hook is not configured",
+         scope=hooks_path,
+         fix="sandshell apply codex")
+if not has_post:
+    emit("codex.hooks.post_bash", "medium",
+         "Codex PostToolUse audit-trail hook is not configured",
+         scope=hooks_path,
+         fix="sandshell apply codex")
+
+# Feature-flag silent-disable trap: any sandshell hook present in hooks.json
+# is dead config if [features] codex_hooks = true isn't set in config.toml.
+if has_pre or has_post:
+    features = cfg.get("features", {}) if isinstance(cfg, dict) else {}
+    flag_on = isinstance(features, dict) and features.get("codex_hooks") is True
+    if not flag_on:
+        emit("codex.hooks.feature_flag", "high",
+             "hooks.json has sandshell hooks but [features] codex_hooks is not enabled — Codex ignores hooks silently",
+             scope=config_path,
+             fix='Add [features] codex_hooks = true to ~/.codex/config.toml (or re-run sandshell apply codex)',
+             details="Without the feature flag, Codex silently ignores any hooks.json. This is the silent-disable failure mode the audit's there to catch.")
 PY

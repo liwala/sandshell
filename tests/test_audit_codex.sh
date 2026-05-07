@@ -76,4 +76,77 @@ mkdir -p "$TMPDIR_TEST/case3/home/.codex"
 out=$(run_codex "$TMPDIR_TEST/case3/home" "$TMPDIR_TEST/case3/cwd")
 assert_finding "$out" "codex.no_config"
 
-echo "PASS: codex audit checks (sandbox_mode, approval_policy, network, trust)"
+# Case 4: config.toml present but no hooks.json → both hook findings fire,
+# feature_flag does NOT fire (no hooks present means no silent-disable trap).
+mkdir -p "$TMPDIR_TEST/case4/home/.codex"
+cat > "$TMPDIR_TEST/case4/home/.codex/config.toml" <<'EOF'
+sandbox_mode = "workspace-write"
+EOF
+out=$(run_codex "$TMPDIR_TEST/case4/home" "$TMPDIR_TEST/case4/cwd")
+assert_finding "$out" "codex.hooks.pre_bash"
+assert_finding "$out" "codex.hooks.post_bash"
+assert_no_finding "$out" "codex.hooks.feature_flag"
+
+# Case 5: hooks.json with sandshell hooks + [features] codex_hooks = true →
+# no hook findings.
+mkdir -p "$TMPDIR_TEST/case5/home/.codex"
+cat > "$TMPDIR_TEST/case5/home/.codex/config.toml" <<'EOF'
+sandbox_mode = "workspace-write"
+
+[features]
+codex_hooks = true
+EOF
+cat > "$TMPDIR_TEST/case5/home/.codex/hooks.json" <<'EOF'
+{
+  "hooks": {
+    "PreToolUse": [{"matcher": "^Bash$", "hooks": [{"type": "command", "command": "/path/to/hook-pre-bash.sh"}]}],
+    "PostToolUse": [{"matcher": "^Bash$", "hooks": [{"type": "command", "command": "/path/to/hook-post-bash.sh"}]}]
+  }
+}
+EOF
+out=$(run_codex "$TMPDIR_TEST/case5/home" "$TMPDIR_TEST/case5/cwd")
+assert_no_finding "$out" "codex.hooks.pre_bash"
+assert_no_finding "$out" "codex.hooks.post_bash"
+assert_no_finding "$out" "codex.hooks.feature_flag"
+
+# Case 6: silent-disable trap — sandshell hooks present in hooks.json, but
+# [features] codex_hooks is missing → codex.hooks.feature_flag fires (high).
+mkdir -p "$TMPDIR_TEST/case6/home/.codex"
+cat > "$TMPDIR_TEST/case6/home/.codex/config.toml" <<'EOF'
+sandbox_mode = "workspace-write"
+EOF
+cat > "$TMPDIR_TEST/case6/home/.codex/hooks.json" <<'EOF'
+{
+  "hooks": {
+    "PreToolUse": [{"matcher": "^Bash$", "hooks": [{"type": "command", "command": "/path/to/hook-pre-bash.sh"}]}],
+    "PostToolUse": [{"matcher": "^Bash$", "hooks": [{"type": "command", "command": "/path/to/hook-post-bash.sh"}]}]
+  }
+}
+EOF
+out=$(run_codex "$TMPDIR_TEST/case6/home" "$TMPDIR_TEST/case6/cwd")
+assert_finding "$out" "codex.hooks.feature_flag"
+echo "$out" | grep -q '"severity":"high"' \
+  || fail "case6: feature_flag silent-disable should be high severity, got: $out"
+
+# Case 7: hooks.json exists but contains only non-sandshell hooks
+# (e.g., user has their own pre-tool checker). Sandshell-specific findings
+# still fire because our hook scripts aren't there.
+mkdir -p "$TMPDIR_TEST/case7/home/.codex"
+cat > "$TMPDIR_TEST/case7/home/.codex/config.toml" <<'EOF'
+sandbox_mode = "workspace-write"
+
+[features]
+codex_hooks = true
+EOF
+cat > "$TMPDIR_TEST/case7/home/.codex/hooks.json" <<'EOF'
+{
+  "hooks": {
+    "PreToolUse": [{"matcher": "^Bash$", "hooks": [{"type": "command", "command": "/usr/local/bin/my-custom-checker.sh"}]}]
+  }
+}
+EOF
+out=$(run_codex "$TMPDIR_TEST/case7/home" "$TMPDIR_TEST/case7/cwd")
+assert_finding "$out" "codex.hooks.pre_bash"
+assert_finding "$out" "codex.hooks.post_bash"
+
+echo "PASS: codex audit checks (sandbox_mode, approval_policy, network, trust, hooks)"

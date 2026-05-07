@@ -37,19 +37,26 @@ Behavior when ~/.codex/config.toml already exists:
   - with --force: unconditionally overwritten with sandshell's defaults
 
 Options:
-  --force   Overwrite the existing file instead of merging
-  --show    Print the fresh-install config (dry-run)
+  --force        Overwrite the existing file instead of merging
+  --show         Print the fresh-install config (dry-run)
+  --skip-hooks   Skip Codex hook configuration (~/.codex/hooks.json)
   -h, --help
 
 Codex's macOS sandbox uses Seatbelt MAC — same primitive Chrome renderer uses.
 Network deny is enforced at kernel level for spawned subprocesses.
+
+Hooks are also configured (PreToolUse Bash guard + PostToolUse audit
+trail) per developers.openai.com/codex/hooks. Pass --skip-hooks to opt out.
 EOF
 }
 
+SKIP_HOOKS=false
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --force) FORCE=true; shift ;;
-    --show)  SHOW_ONLY=true; shift ;;
+    --force)       FORCE=true; shift ;;
+    --show)        SHOW_ONLY=true; shift ;;
+    --skip-hooks)  SKIP_HOOKS=true; shift ;;
     -h|--help|help) usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage >&2; exit 1 ;;
   esac
@@ -257,6 +264,12 @@ or report an upstream issue.
 
 To remove sandshell's config: edit $CONFIG_FILE or delete the file.
 EOF
+
+if [[ "$SKIP_HOOKS" = false ]]; then
+  echo ""
+  echo "--- Configuring Codex hooks ---"
+  "$SCRIPT_DIR/setup-codex-hooks.sh" user
+fi
 
 # Refresh the drift baseline so the next 'sandshell audit' compares against
 # this post-apply state.

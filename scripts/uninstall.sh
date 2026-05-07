@@ -65,6 +65,7 @@ case "$SCOPE" in
     GEMINI_FILE="$HOME/.gemini/GEMINI.md"
     # v0.2 added: agent config files written by `sandshell apply codex|gemini`
     CODEX_CONFIG="$HOME/.codex/config.toml"
+    CODEX_HOOKS="$HOME/.codex/hooks.json"
     GEMINI_CONFIG="$HOME/.gemini/settings.json"
     ;;
   project)
@@ -74,8 +75,9 @@ case "$SCOPE" in
     CODEX_SKILL_DIR=".codex/skills/sandshell"
     GENERIC_FILE="SANDSHELL.md"
     GEMINI_FILE="GEMINI.md"
-    # Codex has no project scope; project maps to Gemini's workspace settings.
+    # Codex config.toml is user-only; project scope just removes hooks.json.
     CODEX_CONFIG=""
+    CODEX_HOOKS=".codex/hooks.json"
     GEMINI_CONFIG=".gemini/settings.json"
     ;;
 esac
@@ -109,6 +111,35 @@ if [[ -n "$CODEX_CONFIG" && -f "$CODEX_CONFIG" ]]; then
   if grep -q "Managed by sandshell" "$CODEX_CONFIG" 2>/dev/null; then
     rm "$CODEX_CONFIG"
     echo "Removed sandshell-managed $CODEX_CONFIG"
+  else
+    # Mixed config: strip just the codex_hooks feature flag we added.
+    if grep -qE '^[[:space:]]*codex_hooks[[:space:]]*=[[:space:]]*true' "$CODEX_CONFIG"; then
+      sed -i.bak -E '/^[[:space:]]*codex_hooks[[:space:]]*=[[:space:]]*true[[:space:]]*$/d' "$CODEX_CONFIG"
+      rm -f "$CODEX_CONFIG.bak"
+      echo "Removed codex_hooks feature flag from $CODEX_CONFIG"
+    fi
+  fi
+fi
+
+# Remove sandshell-installed hooks from ~/.codex/hooks.json (or
+# .codex/hooks.json at project scope). Surgical jq remove — preserves any
+# user-added hooks for other tools.
+if [[ -n "$CODEX_HOOKS" && -f "$CODEX_HOOKS" ]]; then
+  updated=$(jq '
+    .hooks.PreToolUse = ((.hooks.PreToolUse // []) |
+      map(select(([(.hooks[]?.command // empty)] | any(contains("hook-pre-bash.sh"))) | not))) |
+    .hooks.PostToolUse = ((.hooks.PostToolUse // []) |
+      map(select(([(.hooks[]?.command // empty)] | any(contains("hook-post-bash.sh"))) | not))) |
+    if (.hooks.PreToolUse // [] | length) == 0 then del(.hooks.PreToolUse) else . end |
+    if (.hooks.PostToolUse // [] | length) == 0 then del(.hooks.PostToolUse) else . end |
+    if (.hooks // {}) == {} then del(.hooks) else . end
+  ' "$CODEX_HOOKS")
+  if [[ "$(echo "$updated" | jq 'length')" == "0" ]]; then
+    rm "$CODEX_HOOKS"
+    echo "Removed empty $CODEX_HOOKS"
+  else
+    printf '%s\n' "$updated" | jq '.' > "$CODEX_HOOKS"
+    echo "Removed sandshell hooks from $CODEX_HOOKS"
   fi
 fi
 

@@ -131,7 +131,7 @@ real configuration files and emits findings. Coverage at a glance:
 |--------------|----------------------------------------------------------------------------------------------------------------------------------------------------|
 | `host`       | **Cross-agent host hygiene.** Bypass aliases (`--dangerously-skip-permissions`, `--full-auto`, `--yolo`), bypass env vars, plaintext creds in shell rc / `.envrc`, missing native sandbox primitive, non-git cwd, unknown repo provenance. |
 | `claude`     | **Sandbox on and narrow; bypass paths denied.** Sandbox enabled (catches the silent-disable trap), write/network scope, `dangerouslyDisableSandbox` deny entry, wildcard Bash permissions, curl-pipe-shell patterns, PreToolUse/PostToolUse hooks present, no project-level MCP auto-approve. MCP servers are cross-referenced against an *opt-in* allowlist at `~/.sandshell/known-mcps.json` — silent until you create that file. |
-| `codex`      | **Sandbox on, approvals required, no escape hatches.** `sandbox_mode != danger-full-access`, `approval_policy != never`, no broad `writable_roots`, no `trust_level = "trusted"` for `~`/`/`, no network in workspace mode. |
+| `codex`      | **Sandbox on, approvals required, no escape hatches.** `sandbox_mode != danger-full-access`, `approval_policy != never`, no broad `writable_roots`, no `trust_level = "trusted"` for `~`/`/`, no network in workspace mode. PreToolUse + PostToolUse hooks present, `[features] codex_hooks = true` set (catches the silent-disable trap where hooks.json is ignored). |
 | `gemini`     | **Sandbox on, folder trust on, YOLO and always-allow off.** `tools.sandbox` configured, `sandboxNetworkAccess = false`, `security.folderTrust.enabled`, `security.disableYoloMode`, approval mode set, no wildcard entries in `trustedFolders.json`. |
 
 The credential check classifies each export by injection source: `$(op …)`,
@@ -151,7 +151,7 @@ agent (`apply codex`) or all of them (`apply` / `apply all`).
 | Agent       | What `apply` writes                                                                                    | macOS enforcement today                                                |
 |-------------|--------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------|
 | Claude Code | Native sandbox + Bash PreToolUse/PostToolUse hooks + skill                                             | Filesystem ✓.  Network ✗ (upstream [#37970](https://github.com/anthropics/claude-code/issues/37970)) |
-| Codex CLI   | `~/.codex/config.toml`: `sandbox_mode=workspace-write`, `network_access=false`, `approval_policy=on-request` | Filesystem ✓.  Network ✓ (kernel-enforced via Seatbelt MAC)             |
+| Codex CLI   | `~/.codex/config.toml` (sandbox_mode, network_access, approval_policy) + `~/.codex/hooks.json` (PreToolUse + PostToolUse Bash) + `[features] codex_hooks = true`                  | Filesystem ✓.  Network ✓ (kernel-enforced via Seatbelt MAC)             |
 | Gemini CLI  | `~/.gemini/settings.json`: `tools.sandbox=sandbox-exec`, folder trust on, YOLO/always-allow off        | Filesystem ✓.  Network ✗ under sandbox-exec ([#20381](https://github.com/google-gemini/gemini-cli/issues/20381)); ✓ under `tools.sandbox=docker` |
 
 On Linux, the upstream bugs above don't apply. Claude Code (bubblewrap)
@@ -209,9 +209,9 @@ fork. Each profile is independent (not a superset of `default`).
 
 ## Audit trail
 
-Claude-only. `apply` wires Claude Code's `PostToolUse` Bash hook (which
-fires after every Bash command the agent runs) to append a one-line
-record per command into:
+Claude Code and Codex CLI. `apply` wires each agent's `PostToolUse` Bash
+hook (which fires after every Bash command the agent runs) to append a
+one-line record per command into:
 
 ```bash
 ~/.sandshell/audit/<session-id>.jsonl
@@ -220,7 +220,19 @@ record per command into:
 Each record is a JSON object with `ts`, `category` (one of `git`,
 `github_cli`, `sandshell`, `read_only`, `unclassified`), `cmd` (truncated
 to 500 chars), and `exit_code` — easy to grep, easy to feed into a
-classifier later.
+classifier later. Sessions from both Claude and Codex land in the same
+directory; the file name is the session ID, so they don't collide.
+
+For Codex, the trail requires a feature flag in `~/.codex/config.toml`:
+
+```toml
+[features]
+codex_hooks = true
+```
+
+`sandshell apply codex` flips this on automatically. Without the flag,
+Codex silently ignores `~/.codex/hooks.json` — sandshell's audit catches
+this case (`codex.hooks.feature_flag`, high severity).
 
 Helpers:
 
@@ -297,7 +309,7 @@ prompts can't:
 | Wildcard Bash permissions                    | `audit` flags `Bash`, `Bash(*)`, and curl-pipe-shell patterns                                     |
 | Untrusted MCP servers                        | `audit` flags MCP servers not in your opt-in allowlist at `~/.sandshell/known-mcps.json` — silent until you create the file |
 | Plaintext credentials in shell rc / `.envrc` | `audit` parses each cred export and classifies the injection source — silent for known secret managers (`op`, `aws-vault`, `vault`, `pass`, `gh auth token`, etc.), medium for literal values; `apply --strict` adds read-deny for credential paths |
-| Untracked host-side Bash activity            | PostToolUse hook records every Bash command for retrospective review (Claude only — Codex and Gemini don't have an equivalent hook system) |
+| Untracked host-side Bash activity            | PostToolUse hook records every Bash command for retrospective review (Claude Code and Codex CLI; Gemini has no equivalent hook system) |
 | Filesystem writes outside the repo            | Native sandbox enforces filesystem bounds (Seatbelt on macOS, bubblewrap on Linux)                |
 
 ### What it does not solve on its own
