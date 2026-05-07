@@ -212,4 +212,15 @@ ec=$?
 set -e
 [[ "$ec" != "0" ]] || fail "case19: --drift-only --json should error, got exit $ec"
 
-echo "PASS: audit-config runner (sort, --json schema, --strict, --summary, malformed handling, drift)"
+# Case 20: drift output includes a snapshot-count line ("N snapshots in ...").
+# We have 1 baseline written by case 13's --snapshot; add a second so the
+# "(oldest <date>)" clause renders. Sleep 1s so the timestamp differs.
+sleep 1
+"$FAKE_ROOT/scripts/audit-config.sh" --snapshot --no-drift --json >/dev/null
+out=$(NO_COLOR=1 "$FAKE_ROOT/scripts/audit-config.sh" --drift-only 2>&1)
+[[ "$out" == *"snapshots in"* ]] \
+  || fail "case20: drift-only should include snapshot-count line, got: $out"
+[[ "$out" == *"(oldest"* ]] \
+  || fail "case20: count line should mention oldest snapshot date, got: $out"
+
+echo "PASS: audit-config runner (sort, --json schema, --strict, --summary, malformed handling, drift, count)"

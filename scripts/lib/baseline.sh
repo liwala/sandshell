@@ -31,3 +31,32 @@ sandshell_baseline_write() {
   cp "$hist" "$dir/current.json"
   echo "$hist"
 }
+
+# Echo a one-line summary of the snapshot directory: "<count> snapshots in
+# <dir> (oldest <YYYY-MM-DD>)". For 0 snapshots: "no snapshots yet". For 1:
+# omits the "(oldest …)" clause. The dir is shortened with $HOME → ~.
+#
+# Used by apply scripts (after each --snapshot) and by audit-config.sh's
+# drift output to tell the user how thick the trail has gotten.
+sandshell_baseline_summary() {
+  local dir; dir="$(sandshell_baseline_dir)"
+  if [[ ! -d "$dir" ]]; then
+    echo "no snapshots yet"
+    return 0
+  fi
+  local files=()
+  while IFS= read -r f; do
+    [[ -n "$f" ]] && files+=("$f")
+  done < <(find "$dir" -maxdepth 1 -type f -name 'audit-*.json' 2>/dev/null | sort)
+  local count="${#files[@]}"
+  local short_dir="${dir/#$HOME/~}"
+  if [[ "$count" -eq 0 ]]; then
+    echo "no snapshots yet"
+  elif [[ "$count" -eq 1 ]]; then
+    echo "1 snapshot in $short_dir"
+  else
+    local oldest_date
+    oldest_date=$(echo "${files[0]}" | sed -E 's|.*/audit-([0-9]{4}-[0-9]{2}-[0-9]{2}).*|\1|')
+    echo "$count snapshots in $short_dir (oldest $oldest_date)"
+  fi
+}

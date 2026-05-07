@@ -261,3 +261,6 @@ EOF
 # Refresh the drift baseline so the next 'sandshell audit' compares against
 # this post-apply state.
 "$SCRIPT_DIR/audit-config.sh" --snapshot --no-drift --json >/dev/null 2>&1 || true
+# shellcheck source=lib/baseline.sh
+. "$SCRIPT_DIR/lib/baseline.sh"
+echo "Baseline saved. $(sandshell_baseline_summary)."

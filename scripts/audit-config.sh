@@ -114,6 +114,15 @@ if [[ "$SNAPSHOT" = "true" ]]; then
   snapshot_hist="$baseline_dir/audit-$(date -u +%Y-%m-%dT%H-%M-%SZ).json"
 fi
 
+# Pre-compute the snapshot-trail summary string so the Python rendering
+# layer can print it under the drift block without re-implementing the
+# directory walk. (Computed BEFORE writing the new snapshot so the count
+# reflects what existed when the audit started.)
+baseline_summary_line=""
+if [[ -n "$baseline_current" || "$SNAPSHOT" = "true" ]]; then
+  baseline_summary_line="$(sandshell_baseline_summary)"
+fi
+
 # Format and emit
 python3 - \
   "$findings_file" \
@@ -124,6 +133,7 @@ python3 - \
   "$baseline_current" \
   "$snapshot_hist" \
   "$baseline_dir/current.json" \
+  "$baseline_summary_line" \
   "${ran_adapters[*]:-}" <<'PY'
 import json, os, sys
 from datetime import datetime, timezone
@@ -136,7 +146,8 @@ drift_only        = sys.argv[5] == "true"
 baseline_current  = sys.argv[6]                                 # "" if no baseline / suppressed
 snapshot_hist     = sys.argv[7]                                 # "" if --snapshot not set
 baseline_pointer  = sys.argv[8]                                 # current.json path (always set)
-ran_adapters      = sys.argv[9].split() if len(sys.argv) > 9 else []
+baseline_summary  = sys.argv[9]                                 # "" when no drift / not relevant
+ran_adapters      = sys.argv[10].split() if len(sys.argv) > 10 else []
 
 SEVERITY_ORDER = {"critical": 0, "high": 1, "medium": 2, "info": 3}
 ACTIONABLE = {"critical", "high", "medium"}
@@ -271,6 +282,9 @@ if drift_only:
         print("No baseline yet. Run 'sandshell apply' (or 'sandshell audit --snapshot') to capture one.")
     else:
         print_drift_human(drift)
+        if baseline_summary:
+            print()
+            print(c("dim", f"{baseline_summary}."))
 
 elif summary:
     # Worst severity per adapter; "ok" if no findings.
@@ -339,6 +353,9 @@ else:
     if drift is not None:
         print()
         print_drift_human(drift)
+        if baseline_summary:
+            print()
+            print(c("dim", f"{baseline_summary}."))
 
 if strict:
     actionable = sum(1 for f in findings if f["severity"] in ACTIONABLE)
