@@ -152,15 +152,16 @@ agent (`apply codex`) or all of them (`apply` / `apply all`).
 |-------------|--------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------|
 | Claude Code | Native sandbox + Bash PreToolUse/PostToolUse hooks + skill                                             | Filesystem ✓.  Network ✗ (upstream [#37970](https://github.com/anthropics/claude-code/issues/37970)) |
 | Codex CLI   | `~/.codex/config.toml` (sandbox_mode, network_access, approval_policy) + `~/.codex/hooks.json` (PreToolUse + PostToolUse Bash) + `[features] codex_hooks = true`                  | Filesystem ✓.  Network ✓ (kernel-enforced via Seatbelt MAC)             |
-| Gemini CLI  | `~/.gemini/settings.json`: `tools.sandbox=sandbox-exec`, folder trust on, YOLO/always-allow off        | Filesystem ✓.  Network ✗ under sandbox-exec ([#20381](https://github.com/google-gemini/gemini-cli/issues/20381)); ✓ under `tools.sandbox=docker` |
+| Gemini CLI  | `~/.gemini/settings.json`: `tools.sandbox` (auto-detected: `sandbox-exec` on macOS, `docker`/`podman` on Linux based on what's installed), folder trust on, YOLO/always-allow off | Filesystem ✓.  Network ✗ under sandbox-exec ([#20381](https://github.com/google-gemini/gemini-cli/issues/20381)); ✓ under `tools.sandbox=docker` |
 
 On Linux, the upstream bugs above don't apply. Claude Code (bubblewrap)
 and Codex (bubblewrap + seccomp + Landlock) enforce both filesystem and
-network at the kernel. Gemini on Linux requires `tools.sandbox = "docker"`
-(its `sandbox-exec` profile is macOS-only); sandshell's Gemini Linux path
-is incomplete today — see [KNOWN_ISSUES.md](KNOWN_ISSUES.md). Sandshell
-writes forward-correct config so users get the benefit automatically when
-the macOS fixes land.
+network at the kernel. Gemini on Linux uses `tools.sandbox=docker` or
+`podman` (whichever is installed; `sandbox-exec` is macOS-only); the audit
+fires `gemini.sandbox.linux_runtime_missing` if neither runtime is
+available so the gap is visible rather than silent. Sandshell writes
+forward-correct config so users get the benefit automatically when the
+macOS fixes land.
 
 Codex and Gemini are configured by a single file each — one place per agent
 for safety settings. Claude Code is layered, so `apply` writes three
@@ -332,12 +333,18 @@ check.
 
 ### Roadmap toward 1.0
 
-- **Seeded MCP allowlist.** The curation check is opt-in today (silent
-  until you create `~/.sandshell/known-mcps.json`); a default list drawn
-  from `modelcontextprotocol/servers` will ship before 1.0.
-- **Gemini Linux sandbox path.** `setup-gemini` currently writes
-  `tools.sandbox=sandbox-exec` regardless of OS — invalid on Linux, where
-  the path needs to switch to `tools.sandbox=docker`.
+- **Real MCP audit signal.** The MCP curation check is currently a hook
+  for users who maintain their own `~/.sandshell/known-mcps.json`
+  (silent until you create the file). Sandshell deliberately doesn't
+  ship a curated default list — being the trust authority for MCPs is
+  not a position we want to occupy. The v0.3+ research direction is
+  pulling real signal from external sources: GitHub Security Advisories
+  by package name, postinstall-script analysis, freshly-published
+  version detection. None of which we ship today.
+- **Refine the PreToolUse Bash guard's matcher.** It currently blocks
+  any Bash command containing the literal trigger string, including
+  inside quoted text in commit messages. Low-priority polish — workaround
+  is to avoid the trigger string in shell-visible text.
 
 ## Requirements
 

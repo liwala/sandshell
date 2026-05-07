@@ -248,6 +248,71 @@ check_guidance_present() {
   fi
 }
 
+# ---------- gemini.sandbox.linux_invalid ----------
+# tools.sandbox = "sandbox-exec" is a macOS-only value (Seatbelt). On Linux,
+# sandbox-exec doesn't exist as a binary; the Gemini CLI's spawn will fail at
+# runtime when it tries to execute it. High severity — the user thinks they
+# have a sandbox configured but they don't.
+check_sandbox_linux_invalid() {
+  local os_name="${SANDSHELL_FAKE_UNAME:-$(uname -s)}"
+  [[ "$os_name" = "Linux" ]] || return 0
+  if any_scope_matches '.tools.sandbox == "sandbox-exec"'; then
+    emit_finding \
+      "gemini.sandbox.linux_invalid" \
+      "high" \
+      'tools.sandbox = "sandbox-exec" is macOS-only — Gemini will fail at runtime on this Linux host' \
+      "$USER_CFG" \
+      'Re-run sandshell apply gemini (auto-detects docker/podman) or set tools.sandbox to "docker" / "podman" manually'
+  fi
+}
+
+# ---------- gemini.sandbox.linux_runtime_missing ----------
+# Linux + tools.sandbox unset (or set to a runtime that's not installed) +
+# no docker/podman in PATH = sandboxing is unavailable. High severity: the
+# user has no sandbox at all on this host.
+check_sandbox_linux_runtime_missing() {
+  local os_name="${SANDSHELL_FAKE_UNAME:-$(uname -s)}"
+  [[ "$os_name" = "Linux" ]] || return 0
+  # Already covered by gemini.sandbox.linux_invalid if value is sandbox-exec.
+  if any_scope_matches '.tools.sandbox == "sandbox-exec"'; then
+    return 0
+  fi
+  # If tools.sandbox is set to a valid Linux value, check that runtime is
+  # present. If unset, check that *some* runtime exists.
+  local configured_runtime=""
+  while read -r scope path; do
+    local val
+    val=$(jq -r '.tools.sandbox // empty' "$path" 2>/dev/null || true)
+    if [[ -n "$val" && "$val" != "null" ]]; then
+      configured_runtime="$val"
+      break
+    fi
+  done < <(existing_scopes)
+
+  if [[ -n "$configured_runtime" ]]; then
+    if ! command -v "$configured_runtime" >/dev/null 2>&1; then
+      emit_finding \
+        "gemini.sandbox.linux_runtime_missing" \
+        "high" \
+        "tools.sandbox = \"$configured_runtime\" but '$configured_runtime' is not installed — sandboxing will fail at runtime" \
+        "$USER_CFG" \
+        "Install $configured_runtime, or re-run sandshell apply gemini to switch to a runtime that's available"
+    fi
+  else
+    # No tools.sandbox set anywhere → check if any runtime is available.
+    if ! command -v docker >/dev/null 2>&1 \
+       && ! command -v podman >/dev/null 2>&1 \
+       && ! command -v lxc >/dev/null 2>&1; then
+      emit_finding \
+        "gemini.sandbox.linux_runtime_missing" \
+        "high" \
+        "Gemini on Linux has no sandboxing — tools.sandbox is unset and no container runtime (docker/podman/lxc) is installed" \
+        "host" \
+        "Install docker or podman, then re-run sandshell apply gemini"
+    fi
+  fi
+}
+
 check_sandbox_enabled
 check_sandbox_network_off
 check_sandbox_paths_bounded
@@ -258,3 +323,5 @@ check_approval_mode
 check_trusted_folders_bounded
 check_trusted_folders_review
 check_guidance_present
+check_sandbox_linux_invalid
+check_sandbox_linux_runtime_missing

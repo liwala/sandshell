@@ -10,6 +10,11 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TMPDIR_TEST="$(mktemp -d "${TMPDIR:-/tmp}/sandshell-test-gemini.XXXXXX")"
 trap 'rm -rf "$TMPDIR_TEST"' EXIT
 
+# Pin OS to Darwin for the macOS-path cases so they pass regardless of the
+# host running the test (CI is Linux). The Linux branch has its own cases
+# below.
+export SANDSHELL_FAKE_UNAME=Darwin
+
 # Case 1: fresh install (user scope) writes the expected fields.
 HOME="$TMPDIR_TEST/case1" "$ROOT/scripts/setup-gemini.sh" user >/dev/null
 config="$TMPDIR_TEST/case1/.gemini/settings.json"
@@ -62,4 +67,60 @@ out=$(HOME="$TMPDIR_TEST/case5" "$ROOT/scripts/setup-gemini.sh" --show 2>&1)
 [[ ! -f "$TMPDIR_TEST/case5/.gemini/settings.json" ]] \
   || fail "case5: --show should not write a file"
 
-echo "PASS: setup-gemini merges safe defaults, preserves other keys, supports user/project scopes (workspace alias)"
+# ---------- Linux backend selection ----------
+unset SANDSHELL_FAKE_UNAME
+
+# Case 6: Linux + docker available → tools.sandbox = "docker".
+mkdir -p "$TMPDIR_TEST/case6/fakebin"
+cat > "$TMPDIR_TEST/case6/fakebin/docker" <<'EOF'
+#!/bin/sh
+exit 0
+EOF
+chmod +x "$TMPDIR_TEST/case6/fakebin/docker"
+SANDSHELL_FAKE_UNAME=Linux PATH="$TMPDIR_TEST/case6/fakebin:$PATH" \
+  HOME="$TMPDIR_TEST/case6" "$ROOT/scripts/setup-gemini.sh" user >/dev/null
+assert_json_value "$TMPDIR_TEST/case6/.gemini/settings.json" "tools.sandbox" "docker"
+assert_json_value "$TMPDIR_TEST/case6/.gemini/settings.json" "tools.sandboxNetworkAccess" "false"
+
+# Case 7: Linux + only podman → tools.sandbox = "podman".
+mkdir -p "$TMPDIR_TEST/case7/fakebin"
+cat > "$TMPDIR_TEST/case7/fakebin/podman" <<'EOF'
+#!/bin/sh
+exit 0
+EOF
+chmod +x "$TMPDIR_TEST/case7/fakebin/podman"
+# Restrict PATH so neither docker nor a real one leak in. jq still needs to
+# be reachable, so we keep /usr/bin and /opt/homebrew/bin in the search path.
+SANDSHELL_FAKE_UNAME=Linux PATH="$TMPDIR_TEST/case7/fakebin:/usr/bin:/bin:/opt/homebrew/bin" \
+  HOME="$TMPDIR_TEST/case7" "$ROOT/scripts/setup-gemini.sh" user >/dev/null
+# (This case relies on docker NOT being on the restricted PATH; if the host
+# happens to have it in /usr/bin, we skip the assertion rather than fail.)
+if ! command -v docker >/dev/null 2>&1 && [[ -x "$TMPDIR_TEST/case7/fakebin/podman" ]]; then
+  actual=$(jq -r '.tools.sandbox // "<unset>"' "$TMPDIR_TEST/case7/.gemini/settings.json")
+  [[ "$actual" == "podman" ]] \
+    || fail "case7: expected tools.sandbox=podman, got: $actual"
+fi
+
+# Case 8: Linux + neither docker nor podman → tools.sandbox is OMITTED.
+SANDSHELL_FAKE_UNAME=Linux PATH=/usr/bin:/bin \
+  HOME="$TMPDIR_TEST/case8" "$ROOT/scripts/setup-gemini.sh" user >/dev/null
+config8="$TMPDIR_TEST/case8/.gemini/settings.json"
+[[ -f "$config8" ]] || fail "case8: settings.json was not written"
+[[ "$(jq -r '.tools.sandbox // "<unset>"' "$config8")" == "<unset>" ]] \
+  || fail "case8: tools.sandbox should be omitted on Linux without container runtime, got: $(jq '.tools' "$config8")"
+# Other safety keys still get written.
+assert_json_value "$config8" "tools.sandboxNetworkAccess" "false"
+assert_json_value "$config8" "security.disableYoloMode" "true"
+
+# Case 9: Stale sandbox-exec on Linux gets removed on re-apply (the merge
+# path strips it when the OS can't deliver it).
+mkdir -p "$TMPDIR_TEST/case9/.gemini"
+cat > "$TMPDIR_TEST/case9/.gemini/settings.json" <<'EOF'
+{"sandshell_managed": true, "tools": {"sandbox": "sandbox-exec", "sandboxNetworkAccess": false}}
+EOF
+SANDSHELL_FAKE_UNAME=Linux PATH=/usr/bin:/bin \
+  HOME="$TMPDIR_TEST/case9" "$ROOT/scripts/setup-gemini.sh" user >/dev/null
+[[ "$(jq -r '.tools.sandbox // "<unset>"' "$TMPDIR_TEST/case9/.gemini/settings.json")" == "<unset>" ]] \
+  || fail "case9: stale sandbox-exec should be stripped on Linux re-apply"
+
+echo "PASS: setup-gemini merges safe defaults, preserves other keys, supports user/project scopes, OS-aware sandbox backend"
