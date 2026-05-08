@@ -26,7 +26,7 @@ usage() {
 
 SCOPE="user"
 PROFILE="default"
-EXTRA_ARGS=""
+EXTRA_ARGS=()
 SKIP_SANDBOX=false
 SKIP_HOOKS=false
 
@@ -38,8 +38,8 @@ while [[ $# -gt 0 ]]; do
       echo "Note: 'personal' is the legacy name for 'user' — both still accepted." >&2
       shift
       ;;
-    --profile=*)      PROFILE="${1#*=}"; EXTRA_ARGS="$EXTRA_ARGS $1"; shift ;;
-    --strict)         EXTRA_ARGS="$EXTRA_ARGS --strict"; shift ;;
+    --profile=*)      PROFILE="${1#*=}"; EXTRA_ARGS+=("$1"); shift ;;
+    --strict)         EXTRA_ARGS+=("--strict"); shift ;;
     --skip-sandbox)   SKIP_SANDBOX=true; shift ;;
     --skip-hooks)     SKIP_HOOKS=true; shift ;;
     --help|-h|help)   usage ;;
@@ -54,7 +54,7 @@ echo ""
 # Step 1: Native sandbox
 if [[ "$SKIP_SANDBOX" = false ]]; then
   echo "--- Layer 1: Native OS sandbox ---"
-  "$SCRIPT_DIR/setup-sandbox.sh" "$SCOPE" --profile="$PROFILE" $EXTRA_ARGS
+  "$SCRIPT_DIR/setup-sandbox.sh" "$SCOPE" --profile="$PROFILE" ${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}
   echo ""
 else
   echo "--- Layer 1: Native OS sandbox (skipped) ---"

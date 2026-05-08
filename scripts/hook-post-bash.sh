@@ -4,7 +4,6 @@
 # Install via: sandshell/scripts/setup-hooks.sh
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 AUDIT_DIR="${SANDSHELL_AUDIT_DIR:-$HOME/.sandshell/audit}"
 
 # Read JSON from stdin (consumed once)
@@ -63,6 +62,21 @@ audit_file="$AUDIT_DIR/${short_session}.jsonl"
 # Build JSON safely
 json_cmd=$(printf '%s' "$truncated_cmd" | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))' 2>/dev/null || echo "\"${truncated_cmd:0:200}\"")
 
-echo "{\"ts\":\"${ts}\",\"op\":\"${op}\",\"category\":\"${category}\",\"cmd\":${json_cmd},\"exit_code\":${exit_code:-null}}" >> "$audit_file"
+# Render exit_code as JSON: integer if numeric, JSON-quoted string otherwise,
+# null if unset. A non-numeric value would otherwise produce invalid JSON via
+# string concat (e.g. exit_code=oops → "exit_code":oops).
+json_exit_code=$(printf '%s' "${exit_code:-}" | python3 -c '
+import sys, json
+v = sys.stdin.read()
+if v == "":
+    print("null")
+else:
+    try:
+        print(int(v))
+    except ValueError:
+        print(json.dumps(v))
+' 2>/dev/null || echo "null")
+
+echo "{\"ts\":\"${ts}\",\"op\":\"${op}\",\"category\":\"${category}\",\"cmd\":${json_cmd},\"exit_code\":${json_exit_code}}" >> "$audit_file"
 
 exit 0

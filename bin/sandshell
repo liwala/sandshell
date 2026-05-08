@@ -9,7 +9,12 @@ BIN_DIR="$(cd "$(dirname "$0")" && pwd)"
 SANDSHELL_ROOT="$(cd "$BIN_DIR/.." && pwd)"
 SCRIPTS_DIR="$SANDSHELL_ROOT/scripts"
 
-VERSION="0.2.0"
+VERSION_FILE="$SANDSHELL_ROOT/VERSION"
+if [[ -f "$VERSION_FILE" ]]; then
+  VERSION="$(tr -d '[:space:]' < "$VERSION_FILE")"
+else
+  VERSION="unknown"
+fi
 
 usage() {
   cat <<EOF
@@ -100,25 +105,33 @@ case "$verb" in
         exec "$SCRIPTS_DIR/setup-gemini.sh" "$@"
         ;;
       ""|all)
-        # Apply to every detected agent. detect.sh emits agent_<name>=installed
-        # lines; we run the matching setup for each.
+        # Apply to every detected agent. Args (if any) fan out to all setup
+        # scripts; an agent that doesn't recognize a flag surfaces its own
+        # error and is recorded in failed_agents.
         if [[ "$target" == "all" ]]; then shift; fi
         applied_any=false
+        failed_agents=()
         if command -v claude >/dev/null 2>&1 || [[ -d "$HOME/.claude" ]]; then
           echo "=== Applying to Claude Code ==="
-          "$SCRIPTS_DIR/setup.sh" "$@" || true
+          if ! "$SCRIPTS_DIR/setup.sh" "$@"; then
+            failed_agents+=("claude")
+          fi
           applied_any=true
           echo
         fi
         if command -v codex >/dev/null 2>&1 || [[ -d "$HOME/.codex" ]]; then
           echo "=== Applying to Codex ==="
-          "$SCRIPTS_DIR/setup-codex.sh" || true
+          if ! "$SCRIPTS_DIR/setup-codex.sh" "$@"; then
+            failed_agents+=("codex")
+          fi
           applied_any=true
           echo
         fi
         if command -v gemini >/dev/null 2>&1 || [[ -d "$HOME/.gemini" ]]; then
           echo "=== Applying to Gemini ==="
-          "$SCRIPTS_DIR/setup-gemini.sh" || true
+          if ! "$SCRIPTS_DIR/setup-gemini.sh" "$@"; then
+            failed_agents+=("gemini")
+          fi
           applied_any=true
           echo
         fi
@@ -126,11 +139,22 @@ case "$verb" in
           echo "No supported agents detected. Run 'sandshell detect' for inventory." >&2
           exit 1
         fi
+        if [[ "${#failed_agents[@]}" -gt 0 ]]; then
+          echo "sandshell apply: failed for: ${failed_agents[*]}" >&2
+          exit 1
+        fi
         ;;
       user|project|personal|workspace|--*)
-        # Bare-scope form: apply [user|project] [--profile=...] [--strict]
-        # routes to Claude (the default agent for legacy compat).
-        # 'personal'/'workspace' are accepted as legacy aliases by setup.sh.
+        # Bare-scope or bare-flag form: routes to Claude (legacy compat
+        # since v0.1 used setup.sh as the only target). Many flags
+        # (--strict, --profile=…) are Claude-specific and have no Codex /
+        # Gemini analog, so fanning them out to every agent would just
+        # produce errors.
+        if [[ "$target" == --* ]]; then
+          echo "sandshell apply: '$target' is Claude-specific; routing to Claude only." >&2
+          echo "  For all detected agents, use: sandshell apply (no flags) or 'sandshell apply all'." >&2
+          echo "  For another agent, use: sandshell apply <claude|codex|gemini> [args]." >&2
+        fi
         exec "$SCRIPTS_DIR/setup.sh" "$@"
         ;;
       *)

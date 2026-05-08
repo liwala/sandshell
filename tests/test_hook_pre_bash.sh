@@ -49,4 +49,32 @@ set -e
 [[ "$blocked_status" -eq 2 ]] || fail "Expected blocked command to exit 2, got $blocked_status"
 [[ "$blocked_output" == *"attempts to weaken sandbox protections"* ]] || fail "Unexpected block output: $blocked_output"
 
-echo "PASS: hook-pre-bash guard behavior"
+# A commit message that mentions dangerouslyDisableSandbox in free text must
+# NOT be blocked. The previous substring match would fire here (regression).
+commit_msg_payload='{"tool_input":{"command":"git commit -m \"warn about dangerouslyDisableSandbox abuse\""}}'
+set +e
+printf '%s' "$commit_msg_payload" | "$ROOT/scripts/hook-pre-bash.sh" >/dev/null 2>&1
+commit_msg_status=$?
+set -e
+[[ "$commit_msg_status" -eq 0 ]] \
+  || fail "Free-text mention in commit message should not be blocked, got exit $commit_msg_status"
+
+# A flag with =true value should still be blocked.
+flag_value_payload='{"tool_input":{"command":"claude --dangerouslyDisableSandbox=true"}}'
+set +e
+printf '%s' "$flag_value_payload" | "$ROOT/scripts/hook-pre-bash.sh" >/dev/null 2>&1
+flag_value_status=$?
+set -e
+[[ "$flag_value_status" -eq 2 ]] \
+  || fail "Flag with =true should be blocked, got exit $flag_value_status"
+
+# A JSON settings-key write should be blocked.
+settings_payload='{"tool_input":{"command":"echo '\''{\"dangerouslyDisableSandbox\": true}'\'' > settings.json"}}'
+set +e
+printf '%s' "$settings_payload" | "$ROOT/scripts/hook-pre-bash.sh" >/dev/null 2>&1
+settings_status=$?
+set -e
+[[ "$settings_status" -eq 2 ]] \
+  || fail "Settings-key form should be blocked, got exit $settings_status"
+
+echo "PASS: hook-pre-bash guard behavior (CLI flag block, commit-message false-positive avoided)"
