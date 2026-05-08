@@ -1,5 +1,19 @@
 # Design notes — v0.2 scope
 
+> **Historical document.** These are the working notes that shaped v0.2.
+> Some details have shifted in the implementation since these were written.
+> Notable drift: the audit now distinguishes the old v0.1 sandbox field
+> names (`filesystem.write.allowOnly`, `network.allowedHosts`) from the
+> current Claude Code schema (`filesystem.allowWrite`, `network.allowedDomains`)
+> and emits `cc.sandbox.legacy_schema` for the former; the host
+> credential check is `host.creds_in_shell_rc` with a vault-vs-literal
+> classifier rather than the simpler `host.long_lived_creds` sketched
+> here; severities have been calibrated against real findings.
+>
+> For the canonical view of what sandshell does today, read **README.md**,
+> **CHANGELOG.md**, and **SECURITY.md**, plus the live adapters under
+> `agents/<name>/audit.sh`.
+
 Working notes. Not for shipping. Source of truth for the README rewrite.
 
 ## What sandshell is

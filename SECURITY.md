@@ -53,6 +53,16 @@ has a comparable enforcement surface.
   behavioral guidance to the agent; Layers 1 and 2 are what contains the
   consequences if a prompt-injection attempt slips through.
 
+## Adapter trust boundary
+
+`scripts/audit-config.sh` discovers and runs every executable `audit.sh` under
+`agents/<name>/` — there is no central registry. This makes adding a new agent
+adapter a one-directory drop-in, but it also means any executable file at
+`agents/*/audit.sh` in your sandshell checkout will run when you invoke
+`sandshell audit`. Treat the `agents/` tree as code you've installed: review
+any out-of-tree adapter before placing it there, and avoid pulling adapter
+contributions from untrusted sources.
+
 ## Reporting
 
 If you believe you found a sensitive issue in sandshell itself, avoid posting

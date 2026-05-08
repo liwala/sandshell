@@ -68,7 +68,7 @@ domains=()
 profile_file="$PROFILES_DIR/${PROFILE}.conf"
 if [[ ! -f "$profile_file" ]]; then
   echo "ERROR: Unknown profile '$PROFILE'. Available:" >&2
-  ls "$PROFILES_DIR"/*.conf 2>/dev/null | xargs -I{} basename {} .conf >&2
+  find "$PROFILES_DIR" -maxdepth 1 -name '*.conf' -exec basename {} .conf \; 2>/dev/null >&2
   exit 1
 fi
 

@@ -27,7 +27,22 @@ for required_file in README.md CHANGELOG.md SECURITY.md VERSION; do
   }
 done
 
-bash -n scripts/*.sh tests/*.sh
+bash -n bin/sandshell scripts/*.sh scripts/lib/*.sh tests/*.sh agents/*/audit.sh
+
+# Run shellcheck at warning-level. SC1091 is suppressed because lib/*.sh
+# sourcing uses a runtime path that the linter can't follow without -x; we
+# lint the libs directly instead. Skipped silently if not installed.
+if command -v shellcheck >/dev/null 2>&1; then
+  shellcheck -S warning -e SC1091 \
+    bin/sandshell \
+    scripts/*.sh \
+    scripts/lib/*.sh \
+    agents/*/audit.sh \
+    tests/*.sh
+else
+  echo "NOTE: shellcheck not installed; skipping shell linting" >&2
+fi
+
 bash tests/run.sh
 
 echo "PASS: release-check"
