@@ -70,6 +70,103 @@ check_shell_alias_bypass() {
   done < <(shell_rc_files)
 }
 
+# ---------- host.shell_function_bypass ----------
+# Shell functions that wrap a known agent and bake in a bypass flag.
+# Catches the function-definition equivalents of an alias bypass:
+#   claude() { command claude --dangerously-skip-permissions "$@"; }
+#   function claude { command claude --yolo "$@"; }
+#   function codex() { exec codex --full-auto "$@"; }
+# Reuses the agent and bypass-flag lists from check_shell_alias_bypass.
+#
+# Matching is whole-function: we capture the body up to the closing brace and
+# look for any bypass flag inside. Single-line and multi-line definitions are
+# both supported via awk's brace-depth tracking.
+check_shell_function_bypass() {
+  local agents='claude|codex|gemini|amp'
+  local bypass_flags='--dangerously-skip-permissions|--full-auto|--dangerously-bypass-approvals-and-sandbox|--dangerously-allow-all|--yolo|--approval-mode=yolo'
+
+  while IFS= read -r rc; do
+    while IFS=$'\t' read -r agent_match start_line body; do
+      [[ -z "$agent_match" ]] && continue
+      local flag_match
+      flag_match=$(printf '%s' "$body" | grep -oE -e "$bypass_flags" | head -1 || true)
+      if [[ -n "$flag_match" ]]; then
+        emit_finding \
+          "host.shell_function_bypass" \
+          "critical" \
+          "Shell function '$agent_match' wraps the agent with bypass flag '$flag_match'" \
+          "$rc:$start_line" \
+          "Remove '$flag_match' from the function body in $rc"
+      fi
+    done < <(awk -v agents="$agents" '
+      function flush_body() {
+        # Tab-separated: name, line, body (newlines collapsed to spaces).
+        gsub(/\n/, " ", body)
+        printf "%s\t%d\t%s\n", name, start_line, body
+        in_func = 0
+        depth = 0
+        body = ""
+        name = ""
+        start_line = 0
+      }
+      BEGIN {
+        in_func = 0
+        depth = 0
+        # Anchored regex pattern built once.
+        pat = "^[[:space:]]*(function[[:space:]]+)?(" agents ")[[:space:]]*\\(\\)[[:space:]]*\\{?"
+        pat_kw = "^[[:space:]]*function[[:space:]]+(" agents ")[[:space:]]*\\{?"
+      }
+      {
+        if (!in_func) {
+          # Strip a trailing # comment for cleaner brace counting (rough).
+          line = $0
+          name_match = ""
+          if (match(line, pat)) {
+            # Pull the agent name from the matched portion.
+            seg = substr(line, RSTART, RLENGTH)
+            n = split(seg, parts, /[^A-Za-z0-9_]+/)
+            for (i = 1; i <= n; i++) {
+              if (parts[i] ~ ("^(" agents ")$")) { name_match = parts[i]; break }
+            }
+          } else if (match(line, pat_kw)) {
+            seg = substr(line, RSTART, RLENGTH)
+            n = split(seg, parts, /[^A-Za-z0-9_]+/)
+            for (i = 1; i <= n; i++) {
+              if (parts[i] ~ ("^(" agents ")$")) { name_match = parts[i]; break }
+            }
+          }
+          if (name_match != "") {
+            in_func = 1
+            depth = 0
+            name = name_match
+            start_line = NR
+            body = line
+            # Count braces on this line.
+            for (i = 1; i <= length(line); i++) {
+              ch = substr(line, i, 1)
+              if (ch == "{") depth++
+              else if (ch == "}") depth--
+            }
+            # If the function opened and closed on the same line, flush now.
+            if (depth <= 0 && index(line, "{") > 0) flush_body()
+          }
+        } else {
+          body = body "\n" $0
+          for (i = 1; i <= length($0); i++) {
+            ch = substr($0, i, 1)
+            if (ch == "{") depth++
+            else if (ch == "}") depth--
+          }
+          if (depth <= 0) flush_body()
+        }
+      }
+      END {
+        # Drop any unterminated capture silently.
+      }
+    ' "$rc" 2>/dev/null || true)
+  done < <(shell_rc_files)
+}
+
 # ---------- host.env_bypass_var ----------
 # Persisted env vars that disable safety, set in shell rc files.
 check_env_bypass_var() {
@@ -186,18 +283,41 @@ classify_cred_rhs() {
 }
 
 check_creds_in_shell_rc() {
-  local cred_vars='AWS_ACCESS_KEY_ID|OPENAI_API_KEY|ANTHROPIC_API_KEY|GITHUB_TOKEN|GH_TOKEN|GOOGLE_API_KEY'
+  # Two-tier detection:
+  #   - cred_vars: an explicit allowlist of well-known credential vars that
+  #     ship with their own quirks (AWS_ACCESS_KEY_ID's STS pairing rule).
+  #   - cred_suffix_pattern: a generic shape match for anything that ends in
+  #     one of the credential-y suffixes. Catches STRIPE_SECRET_KEY,
+  #     SLACK_BOT_TOKEN, HUGGINGFACE_TOKEN, *_API_KEY, *_PASSWORD, etc.
+  #
+  # cred_var_excludes prunes generic matches that look credential-shaped but
+  # aren't (PATH, POSIXLY_CORRECT_*_LIB, …). Add to this if a generic match
+  # turns out noisy in practice — better to silence noisy ones than to give
+  # up the broad pattern entirely.
+  local cred_vars='AWS_ACCESS_KEY_ID|OPENAI_API_KEY|ANTHROPIC_API_KEY|GITHUB_TOKEN|GH_TOKEN|GOOGLE_API_KEY|DATABASE_URL|REDIS_URL|MONGODB_URI'
+  local cred_suffix_pattern='[A-Z][A-Z0-9_]*_(TOKEN|KEY|SECRET|PASSWORD|PASSWD|API_KEY|ACCESS_KEY|PRIVATE_KEY|BEARER|CREDENTIALS|CREDS|AUTH)'
+  # Names that match the generic pattern but are not credentials (extend as
+  # false positives surface in real shell rc files).
+  local cred_var_excludes='^(PATH|MANPATH|LD_LIBRARY_PATH|DYLD_LIBRARY_PATH|PKG_CONFIG_PATH|PYTHONPATH|GOPATH|CLASSPATH|CDPATH|FPATH|HOMEBREW_.*_KEY|SSH_AUTH_SOCK|SSH_AGENT_PID|GPG_TTY|GNUPG.*)$'
 
   while IFS= read -r rc; do
     while IFS=: read -r lineno content; do
       [[ -z "$content" ]] && continue
       [[ "$content" =~ ^[[:space:]]*# ]] && continue
 
-      # Pull out the variable name and the raw RHS.
+      # Pull out the variable name and the raw RHS. Try the explicit
+      # allowlist first (so AWS_ACCESS_KEY_ID's STS pairing path still works),
+      # then fall back to the generic suffix pattern.
       local var rhs
       if [[ "$content" =~ (^|[[:space:]])(export[[:space:]]+)?($cred_vars)=(.*)$ ]]; then
         var="${BASH_REMATCH[3]}"
         rhs="${BASH_REMATCH[4]}"
+      elif [[ "$content" =~ (^|[[:space:]])(export[[:space:]]+)?($cred_suffix_pattern)=(.*)$ ]]; then
+        var="${BASH_REMATCH[3]}"
+        rhs="${BASH_REMATCH[5]}"
+        if [[ "$var" =~ $cred_var_excludes ]]; then
+          continue
+        fi
       else
         continue
       fi
@@ -251,7 +371,7 @@ check_creds_in_shell_rc() {
           continue
           ;;
       esac
-    done < <(grep -nE "(export[[:space:]]+)?($cred_vars)=" "$rc" 2>/dev/null || true)
+    done < <(grep -nE "(export[[:space:]]+)?($cred_vars|$cred_suffix_pattern)=" "$rc" 2>/dev/null || true)
   done < <(shell_rc_files)
 }
 
@@ -301,11 +421,11 @@ check_cwd_is_git_repo() {
   if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     emit_finding \
       "host.cwd_is_git_repo" \
-      "high" \
+      "info" \
       "Current directory is not a git repository" \
       "$(pwd)" \
       "git init (or move to a tracked repo) before running an agent here" \
-      "Without revision control, agent changes can't be reviewed or reverted."
+      "Without revision control, agent changes can't be reviewed or reverted. Advisory only — running 'sandshell audit' from a scratch dir is fine."
   fi
 }
 
@@ -335,6 +455,7 @@ check_repo_provenance() {
 
 # Run all checks. Each emits zero or more findings; aggregate to stdout.
 check_shell_alias_bypass
+check_shell_function_bypass
 check_env_bypass_var
 check_creds_in_shell_rc
 check_native_sandbox_available

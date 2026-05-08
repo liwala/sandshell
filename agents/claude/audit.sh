@@ -353,7 +353,6 @@ check_mcp_curated() {
   # Collect all configured MCP server names with their source.
   # Source 1: ~/.claude.json — anywhere a "mcpServers" key appears.
   # Source 2: project-root .mcp.json — a top-level mcpServers object.
-  local seen_servers=()
   local user_claude="$HOME/.claude.json"
   if [[ -f "$user_claude" ]] && jq -e . "$user_claude" >/dev/null 2>&1; then
     while IFS= read -r name; do
@@ -401,23 +400,37 @@ check_mcp_project_auto_approve() {
 }
 
 # ---------- cc.permissions.review ----------
-# Info per scope: enumerate the user's approved Bash/tool permissions so they
-# can periodically prune entries they no longer need. Lists are useful even
-# when individual entries pass the no-wildcard / no-curl-pipe-sh checks.
+# Info — aggregated across scopes: enumerate the user's approved Bash/tool
+# permissions so they can periodically prune entries they no longer need.
+# Lists are useful even when individual entries pass the no-wildcard /
+# no-curl-pipe-sh checks. Emitted as a single rolled-up finding regardless of
+# how many scopes contribute (per-scope emission read as duplicates).
 check_permissions_review() {
-  local scope path count list
+  local scope path count
+  local total=0
+  local scope_summary=""
+  local details=""
   while read -r scope path; do
     count=$(jq -r '(.permissions.allow // []) | length' "$path" 2>/dev/null || echo 0)
     [[ "$count" == "0" ]] && continue
+    total=$((total + count))
+    [[ -n "$scope_summary" ]] && scope_summary+=", "
+    scope_summary+="$scope ($count)"
+    local list
     list=$(jq -r '(.permissions.allow // []) | join(", ")' "$path" 2>/dev/null)
+    [[ -n "$details" ]] && details+=$'\n'
+    details+="$scope: $list"
+  done < <(existing_scopes)
+
+  if [[ "$total" -gt 0 ]]; then
     emit_finding \
       "cc.permissions.review" \
       "info" \
-      "$count approved Bash/tool permission(s) in $scope scope — review periodically" \
-      "$path" \
+      "$total approved Bash/tool permission(s) across scopes ($scope_summary) — review periodically" \
+      "" \
       "Prune entries you no longer need" \
-      "Approved: $list"
-  done < <(existing_scopes)
+      "$details"
+  fi
 }
 
 if ! is_claude_present; then

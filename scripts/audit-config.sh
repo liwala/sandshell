@@ -32,10 +32,11 @@ SUMMARY=false
 SNAPSHOT=false
 NO_DRIFT=false
 DRIFT_ONLY=false
+PRUNE_KEEP=""
 
 usage() {
   cat <<EOF
-Usage: audit-config.sh [--json | --summary | --drift-only] [--strict] [--snapshot] [--no-drift]
+Usage: audit-config.sh [--json | --summary | --drift-only] [--strict] [--snapshot] [--no-drift] [--prune[=N]]
 
   --json        Emit findings (and drift) as JSON (machine-readable)
   --summary     Per-agent worst-severity rollup, key=value format (greppable)
@@ -43,6 +44,8 @@ Usage: audit-config.sh [--json | --summary | --drift-only] [--strict] [--snapsho
   --strict      Exit 2 if any finding has severity >= medium (for verify / CI)
   --snapshot    Write the current findings as the new baseline (used by apply)
   --no-drift    Suppress drift output even if a baseline exists
+  --prune[=N]   Delete historical snapshots older than the most recent N
+                (default 10). current.json is never pruned.
 
 Adapters live in agents/<name>/audit.sh. Each is invoked independently and
 emits NDJSON findings to stdout.
@@ -50,7 +53,7 @@ emits NDJSON findings to stdout.
 Drift baseline:
   Stored under \${SANDSHELL_BASELINE_DIR:-~/.sandshell/baselines}/.
   current.json is the comparison target; audit-<ts>.json files are
-  historical snapshots, retained indefinitely.
+  historical snapshots, retained indefinitely unless --prune is passed.
 EOF
 }
 
@@ -62,10 +65,19 @@ while [[ $# -gt 0 ]]; do
     --strict)      STRICT=true; shift ;;
     --snapshot)    SNAPSHOT=true; shift ;;
     --no-drift)    NO_DRIFT=true; shift ;;
+    --prune)       PRUNE_KEEP="10"; shift ;;
+    --prune=*)     PRUNE_KEEP="${1#*=}"; shift ;;
     -h|--help|help) usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage >&2; exit 1 ;;
   esac
 done
+
+if [[ -n "$PRUNE_KEEP" ]]; then
+  if ! [[ "$PRUNE_KEEP" =~ ^[0-9]+$ ]]; then
+    echo "ERROR: --prune=N requires a non-negative integer (got '$PRUNE_KEEP')" >&2
+    exit 1
+  fi
+fi
 
 modes=0
 $JSON_OUTPUT && modes=$((modes+1))
@@ -134,6 +146,7 @@ python3 - \
   "$snapshot_hist" \
   "$baseline_dir/current.json" \
   "$baseline_summary_line" \
+  "$PRUNE_KEEP" \
   "${ran_adapters[*]:-}" <<'PY'
 import json, os, sys
 from datetime import datetime, timezone
@@ -147,7 +160,8 @@ baseline_current  = sys.argv[6]                                 # "" if no basel
 snapshot_hist     = sys.argv[7]                                 # "" if --snapshot not set
 baseline_pointer  = sys.argv[8]                                 # current.json path (always set)
 baseline_summary  = sys.argv[9]                                 # "" when no drift / not relevant
-ran_adapters      = sys.argv[10].split() if len(sys.argv) > 10 else []
+prune_keep        = sys.argv[10]                                # "" if --prune not set, else N as string
+ran_adapters      = sys.argv[11].split() if len(sys.argv) > 11 else []
 
 SEVERITY_ORDER = {"critical": 0, "high": 1, "medium": 2, "info": 3}
 ACTIONABLE = {"critical", "high", "medium"}
@@ -254,6 +268,34 @@ if snapshot_hist:
             json.dump(snap, f, indent=2)
     except OSError as e:
         print(f"WARNING: could not write snapshot at {snapshot_hist}: {e}", file=sys.stderr)
+
+# Optionally prune old historical snapshots. current.json (the comparison
+# pointer) is never pruned. Runs after the new snapshot is written so
+# `--snapshot --prune` keeps the latest.
+if prune_keep:
+    try:
+        keep_n = int(prune_keep)
+    except ValueError:
+        keep_n = -1
+    if keep_n >= 0:
+        baseline_dir = os.path.dirname(baseline_pointer)
+        try:
+            entries = []
+            for name in os.listdir(baseline_dir):
+                if name.startswith("audit-") and name.endswith(".json"):
+                    entries.append(os.path.join(baseline_dir, name))
+            entries.sort()  # ISO timestamps sort chronologically
+            removed = 0
+            for victim in entries[:-keep_n] if keep_n > 0 else entries:
+                try:
+                    os.remove(victim)
+                    removed += 1
+                except OSError as e:
+                    print(f"WARNING: could not remove {victim}: {e}", file=sys.stderr)
+            if removed and not (json_output or summary or drift_only):
+                print(f"Pruned {removed} historical snapshot(s) (kept latest {keep_n}).", file=sys.stderr)
+        except OSError:
+            pass
 
 # ---------- output ----------
 
