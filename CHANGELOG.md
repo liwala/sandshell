@@ -2,6 +2,36 @@
 
 All notable changes to this project should be documented in this file.
 
+## 0.3.0 - 2026-05-13
+
+### Added
+
+- **`sandshell prune-permissions` verb.** The `cc.permissions.review` audit finding nudges users to revisit approved Bash/tool entries, but pruning them by hand meant editing up to four scoped `settings.json` files. The new verb enumerates every `permissions.allow` entry across `user`, `user-local`, `project`, and `project-local` scopes with a single global index, then removes the selected entries either interactively or via `--remove=INDICES` (supports ranges like `1,3,5-7` and the keyword `all`), `--remove-matching=SUBSTR`, with `--dry-run`, `--yes`, and `--scope=` filters. Writes are atomic via `jq`, preserve all unrelated settings keys, and print a unified diff per file changed using `lib/diff-apply.sh`. The `cc.permissions.review` fix string now points at the new verb.
+- **`host.shell_function_bypass` audit check** (high). Covers the function-form alias bypass that `host.shell_alias_bypass` misses: `claude() { command claude --yolo "$@"; }` and equivalents on bash/zsh, both single- and multi-line definitions. `awk` tracks brace depth so the function body is captured correctly across lines.
+- **Agent API endpoints baked into network profiles.** `profiles/{default,node,python}.conf` now allowlist the model and auth/telemetry endpoints that supported coding agents call home to (`api.anthropic.com`, `api.openai.com`, `generativelanguage.googleapis.com`, plus their auth/console/telemetry siblings, and `http-intake.logs.us5.datadoghq.com` for Datadog-fed observability). Previously the sandbox blocked the agent's own model calls and users saw opaque fetch failures mid-session.
+- **Snapshot pruning.** `sandshell audit --prune[=N]` (default 10) deletes historical baselines older than the most-recent N in `~/.sandshell/baselines/`. `current.json` is never pruned. Pairs with the existing drift workflow without letting old snapshots accumulate forever.
+- **Shellcheck in CI.** `scripts/release-check.sh` runs shellcheck at warning level (SC1091 suppressed because `lib/*.sh` sources via runtime-resolved paths). CI installs shellcheck alongside jq. Skipped silently when shellcheck isn't available locally.
+
+### Changed
+
+- **`host.creds_in_shell_rc` detection** now matches a generic `*_TOKEN` / `*_KEY` / `*_SECRET` / `*_PASSWORD` / `*_CREDENTIALS` / `*_AUTH` suffix shape in addition to the curated allowlist, with a denylist (`PATH`, `SSH_AUTH_SOCK`, `GNUPG*`, etc.) to suppress predictable false positives. `DATABASE_URL`, `REDIS_URL`, and `MONGODB_URI` added to the named list. The injection-source classifier from 0.2.0 still applies — only literal values are flagged.
+- **`cc.permissions.review` finding** rolls up across scopes into a single info entry listing per-scope counts and the union of approved entries. Previously emitted once per scope with identical remediation, which read as duplicates.
+- **`host.cwd_is_git_repo` severity** lowered high → info. Running `sandshell audit` from `~` or a scratch directory was producing a HIGH for a non-config, non-sandbox concern.
+- **`hook-pre-bash.sh` matching** for `dangerouslyDisableSandbox` is now structured (long-form CLI flag, JSON settings key, `jq` path) instead of a substring match. Commit messages mentioning the flag in free text no longer trip the guard. The Bash hook matcher for both Claude and Codex tightened to the exact `^Bash$` form so it never matches Bash-adjacent tool names.
+- **`agents/CODEX.md`** updated to describe the Codex hooks setup added in 0.2.0's `dd71a42` (the file previously claimed sandshell didn't configure Codex hooks). Now covers the install paths, the `[features] codex_hooks = true` requirement, and what the pre/post hooks do.
+
+### Fixed
+
+- **`bin/sandshell` dispatcher correctness.** Reads VERSION from the `VERSION` file (was hardcoded and would drift after each bump). Fans `apply all` arguments to every detected agent's setup script (was only Claude — `--skip-hooks` silently no-op'd for Codex and Gemini). Surfaces non-zero when any agent's setup fails (was `|| true` on every sub-call, hiding failures). Bare-flag forms route to Claude with an explicit notice instead of the silent legacy behavior. Covered by `tests/test_sandshell_cli.sh`.
+- **`scripts/setup.sh`** converts `EXTRA_ARGS` from a space-joined string to a bash array so any argument containing whitespace propagates correctly to downstream setup scripts.
+- **`scripts/hook-post-bash.sh`** renders `exit_code` via Python so a non-numeric value can't corrupt the audit-trail JSON. Dropped unused `SCRIPT_DIR`.
+
+### Repo hygiene
+
+- `.gitignore`: editor backups (`*~`), local scratch dirs, in-progress draft files, and the regenerated `AGENTS.md` artifact.
+- `NOTES.md` carries a top-of-file caveat marking it as historical v0.2 design notes (some details have drifted from live audit behavior); README / CHANGELOG / SECURITY / live adapters are canonical.
+- `SECURITY.md` documents the adapter trust boundary — `sandshell audit` runs every executable `agents/*/audit.sh` with no central registry. Treat `agents/` as installed code.
+
 ## 0.2.0 - 2026-05-03
 
 ### Added
