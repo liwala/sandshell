@@ -428,7 +428,7 @@ check_permissions_review() {
       "info" \
       "$total approved Bash/tool permission(s) across scopes ($scope_summary) — review periodically" \
       "" \
-      "Prune entries you no longer need" \
+      "Run 'sandshell prune-permissions' to remove entries you no longer need" \
       "$details"
   fi
 }

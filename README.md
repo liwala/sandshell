@@ -58,6 +58,7 @@ Then `sandshell drift` next session to see what regressed.
 | `drift`         | Show what changed since the last apply / snapshot                                                    |
 | `verify`        | Re-run audit; exit 2 on findings ≥ medium (for CI / pre-commit)                                      |
 | `trail`         | Inspect the Bash audit trail per Claude Code session (`list`, `show`, `summary`)                     |
+| `prune-permissions` | Interactively prune entries from `permissions.allow` across all Claude scopes (pairs with the `cc.permissions.review` audit finding) |
 | `install-agent` | One-time install of sandshell skill / instruction docs into detected agents (idempotent)             |
 | `uninstall`     | Remove sandshell-managed configs across detected agents                                              |
 
@@ -263,6 +264,26 @@ sandshell trail summary <session-id>    # roll-up classification of a session
 ```
 
 This is *retrospective* data, separate from `sandshell audit` (which is *pre-flight* config audit). Both are useful; they answer different questions.
+
+## Pruning approved permissions
+
+Approved Bash/tool entries in Claude's `permissions.allow` accumulate fast —
+every "always allow" choice during a session lands in `settings.local.json`.
+The `cc.permissions.review` audit finding nudges you to revisit them; the
+`prune-permissions` verb removes them without hand-editing four scoped
+JSON files:
+
+```bash
+sandshell prune-permissions                            # interactive picker
+sandshell prune-permissions --remove=1,3,5-7 --yes     # by global index
+sandshell prune-permissions --remove-matching=foobar --yes
+sandshell prune-permissions --scope=project-local --dry-run
+```
+
+Entries are enumerated across `user`, `user-local`, `project`, and
+`project-local` scopes with a single global index. Removals are surgical
+(other settings keys are preserved exactly) and print a unified diff per
+file changed.
 
 ## Drift detection
 

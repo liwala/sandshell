@@ -48,6 +48,13 @@ Verbs:
                    sandshell trail list                # enumerate logged sessions
                    sandshell trail show <session-id>   # display a session's commands
                    sandshell trail summary <session-id># classify and roll up a session
+  prune-permissions
+                 Interactively prune Claude permissions.allow entries across
+                 all settings.json scopes. Pairs with the cc.permissions.review
+                 audit finding.
+                   sandshell prune-permissions
+                   sandshell prune-permissions --remove=1,3,5 --yes
+                   sandshell prune-permissions --remove-matching=foobar --yes
 
 Options:
   -h, --help     Show this message
@@ -85,6 +92,9 @@ case "$verb" in
     ;;
   trail)
     exec "$SCRIPTS_DIR/audit-trail.sh" "$@"
+    ;;
+  prune-permissions)
+    exec "$SCRIPTS_DIR/prune-permissions.sh" "$@"
     ;;
   apply)
     # apply <agent> dispatches to that agent's setup script.
