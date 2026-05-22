@@ -1,0 +1,15 @@
+# lintskill:shell template v0.1 — opinionated shellcheck config for AI-assisted projects
+# Security: strict, Correctness: strict, Style: relaxed
+# Do not remove the "lintskill:shell template" marker — it lets future runs of
+# lintskill recognize this config as managed and offer to refresh it.
+
+# Default to bash semantics when a script has no shebang
+shell=bash
+
+# Surface real bugs by enabling these optional checks (off by default in shellcheck)
+enable=quote-safe-variables
+enable=add-default-case
+enable=deprecate-which
+
+# Resolve `source` / `.` statements into sourced files when the path is static
+external-sources=true

@@ -5,7 +5,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 if [[ $# -gt 0 ]]; then
   case "$1" in
-    --help|-h|help)
+    --help | -h | help)
       echo "Usage: release-check.sh"
       echo ""
       echo "Runs syntax checks, regression tests, and required-doc checks."
@@ -20,6 +20,13 @@ fi
 
 cd "$ROOT"
 
+# Self-heal: activate the repo's pre-commit hook on first run if a contributor
+# hasn't configured core.hooksPath yet. Leaves an explicit setting alone.
+if [[ -x .githooks/pre-commit ]] && [[ -z "$(git config --get core.hooksPath || true)" ]]; then
+  git config core.hooksPath .githooks
+  echo "NOTE: activated .githooks/pre-commit via core.hooksPath" >&2
+fi
+
 for required_file in README.md CHANGELOG.md SECURITY.md VERSION; do
   [[ -f "$required_file" ]] || {
     echo "ERROR: missing required release file: $required_file" >&2
@@ -32,7 +39,7 @@ bash -n bin/sandshell scripts/*.sh scripts/lib/*.sh tests/*.sh agents/*/audit.sh
 # Run shellcheck at warning-level. SC1091 is suppressed because lib/*.sh
 # sourcing uses a runtime path that the linter can't follow without -x; we
 # lint the libs directly instead. Skipped silently if not installed.
-if command -v shellcheck >/dev/null 2>&1; then
+if command -v shellcheck > /dev/null 2>&1; then
   shellcheck -S warning -e SC1091 \
     bin/sandshell \
     scripts/*.sh \
