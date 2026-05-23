@@ -12,7 +12,7 @@ ADAPTER="$ROOT/agents/gemini/audit.sh"
 run_gemini() {
   local home="$1" cwd="$2"
   mkdir -p "$home" "$cwd"
-  (cd "$cwd" && HOME="$home" "$ADAPTER" 2>/dev/null)
+  (cd "$cwd" && HOME="$home" "$ADAPTER" 2> /dev/null)
 }
 
 assert_finding() {
@@ -30,7 +30,7 @@ assert_no_finding() {
 
 # Case 1: dangerous defaults — every check should fire.
 mkdir -p "$TMPDIR_TEST/case1/home/.gemini"
-cat > "$TMPDIR_TEST/case1/home/.gemini/settings.json" <<'EOF'
+cat > "$TMPDIR_TEST/case1/home/.gemini/settings.json" << 'EOF'
 {
   "tools": {
     "sandboxNetworkAccess": true,
@@ -44,7 +44,7 @@ cat > "$TMPDIR_TEST/case1/home/.gemini/settings.json" <<'EOF'
   }
 }
 EOF
-cat > "$TMPDIR_TEST/case1/home/.gemini/trustedFolders.json" <<'EOF'
+cat > "$TMPDIR_TEST/case1/home/.gemini/trustedFolders.json" << 'EOF'
 {"/": "trusted"}
 EOF
 out=$(run_gemini "$TMPDIR_TEST/case1/home" "$TMPDIR_TEST/case1/cwd")
@@ -59,7 +59,7 @@ assert_finding "$out" "gemini.trusted_folders_bounded"
 
 # Case 2: safe defaults — sandbox/yolo/folder-trust/always-allow checks pass.
 mkdir -p "$TMPDIR_TEST/case2/home/.gemini"
-cat > "$TMPDIR_TEST/case2/home/.gemini/settings.json" <<'EOF'
+cat > "$TMPDIR_TEST/case2/home/.gemini/settings.json" << 'EOF'
 {
   "tools": {"sandbox": "docker", "sandboxNetworkAccess": false},
   "general": {"defaultApprovalMode": "default"},
@@ -82,15 +82,15 @@ run_gemini_os() {
   local home="$1" cwd="$2" os="$3" path_override="${4:-}"
   mkdir -p "$home" "$cwd"
   if [[ -n "$path_override" ]]; then
-    (cd "$cwd" && SANDSHELL_FAKE_UNAME="$os" PATH="$path_override" HOME="$home" "$ADAPTER" 2>/dev/null)
+    (cd "$cwd" && SANDSHELL_FAKE_UNAME="$os" PATH="$path_override" HOME="$home" "$ADAPTER" 2> /dev/null)
   else
-    (cd "$cwd" && SANDSHELL_FAKE_UNAME="$os" HOME="$home" "$ADAPTER" 2>/dev/null)
+    (cd "$cwd" && SANDSHELL_FAKE_UNAME="$os" HOME="$home" "$ADAPTER" 2> /dev/null)
   fi
 }
 
 # Case 3: Linux + tools.sandbox = "sandbox-exec" → linux_invalid (high).
 mkdir -p "$TMPDIR_TEST/case3/home/.gemini"
-cat > "$TMPDIR_TEST/case3/home/.gemini/settings.json" <<'EOF'
+cat > "$TMPDIR_TEST/case3/home/.gemini/settings.json" << 'EOF'
 {"tools": {"sandbox": "sandbox-exec", "sandboxNetworkAccess": false}}
 EOF
 out=$(run_gemini_os "$TMPDIR_TEST/case3/home" "$TMPDIR_TEST/case3/cwd" "Linux")
@@ -101,7 +101,7 @@ echo "$out" | grep -q '"severity":"high"' \
 # Case 4: Linux + tools.sandbox unset + no docker/podman/lxc available →
 # linux_runtime_missing (high).
 mkdir -p "$TMPDIR_TEST/case4/home/.gemini"
-cat > "$TMPDIR_TEST/case4/home/.gemini/settings.json" <<'EOF'
+cat > "$TMPDIR_TEST/case4/home/.gemini/settings.json" << 'EOF'
 {"tools": {"sandboxNetworkAccess": false}}
 EOF
 out=$(run_gemini_os "$TMPDIR_TEST/case4/home" "$TMPDIR_TEST/case4/cwd" "Linux" "/usr/bin:/bin")
@@ -110,7 +110,7 @@ assert_finding "$out" "gemini.sandbox.linux_runtime_missing"
 # Case 5: Linux + tools.sandbox = "docker" but docker not installed →
 # linux_runtime_missing (high).
 mkdir -p "$TMPDIR_TEST/case5/home/.gemini"
-cat > "$TMPDIR_TEST/case5/home/.gemini/settings.json" <<'EOF'
+cat > "$TMPDIR_TEST/case5/home/.gemini/settings.json" << 'EOF'
 {"tools": {"sandbox": "docker", "sandboxNetworkAccess": false}}
 EOF
 out=$(run_gemini_os "$TMPDIR_TEST/case5/home" "$TMPDIR_TEST/case5/cwd" "Linux" "/usr/bin:/bin")
@@ -119,12 +119,12 @@ assert_finding "$out" "gemini.sandbox.linux_runtime_missing"
 # Case 6: Linux + tools.sandbox = "docker" with docker present → no linux_*
 # findings.
 mkdir -p "$TMPDIR_TEST/case6/home/.gemini" "$TMPDIR_TEST/case6/fakebin"
-cat > "$TMPDIR_TEST/case6/fakebin/docker" <<'EOF'
+cat > "$TMPDIR_TEST/case6/fakebin/docker" << 'EOF'
 #!/bin/sh
 exit 0
 EOF
 chmod +x "$TMPDIR_TEST/case6/fakebin/docker"
-cat > "$TMPDIR_TEST/case6/home/.gemini/settings.json" <<'EOF'
+cat > "$TMPDIR_TEST/case6/home/.gemini/settings.json" << 'EOF'
 {"tools": {"sandbox": "docker", "sandboxNetworkAccess": false}}
 EOF
 out=$(run_gemini_os "$TMPDIR_TEST/case6/home" "$TMPDIR_TEST/case6/cwd" "Linux" "$TMPDIR_TEST/case6/fakebin:/usr/bin:/bin")
@@ -134,7 +134,7 @@ assert_no_finding "$out" "gemini.sandbox.linux_runtime_missing"
 # Case 7: macOS + tools.sandbox = "sandbox-exec" → no linux_* findings
 # (sandbox-exec is correct on macOS).
 mkdir -p "$TMPDIR_TEST/case7/home/.gemini"
-cat > "$TMPDIR_TEST/case7/home/.gemini/settings.json" <<'EOF'
+cat > "$TMPDIR_TEST/case7/home/.gemini/settings.json" << 'EOF'
 {"tools": {"sandbox": "sandbox-exec", "sandboxNetworkAccess": false}}
 EOF
 out=$(run_gemini_os "$TMPDIR_TEST/case7/home" "$TMPDIR_TEST/case7/cwd" "Darwin")

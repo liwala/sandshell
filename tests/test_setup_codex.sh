@@ -11,7 +11,7 @@ TMPDIR_TEST="$(mktemp -d "${TMPDIR:-/tmp}/sandshell-test-codex.XXXXXX")"
 trap 'rm -rf "$TMPDIR_TEST"' EXIT
 
 # Case 1: fresh install writes a sandshell-managed file.
-HOME="$TMPDIR_TEST/case1" "$ROOT/scripts/setup-codex.sh" >/dev/null
+HOME="$TMPDIR_TEST/case1" "$ROOT/scripts/setup-codex.sh" > /dev/null
 config="$TMPDIR_TEST/case1/.codex/config.toml"
 [[ -f "$config" ]] || fail "case1: $config was not written"
 grep -q "Managed by sandshell" "$config" \
@@ -24,20 +24,20 @@ grep -q '^network_access = false' "$config" \
   || fail "case1: network_access not set to false"
 
 # Case 2: re-apply on an existing sandshell-managed file is idempotent.
-HOME="$TMPDIR_TEST/case1" "$ROOT/scripts/setup-codex.sh" >/dev/null
+HOME="$TMPDIR_TEST/case1" "$ROOT/scripts/setup-codex.sh" > /dev/null
 grep -q "Managed by sandshell" "$config" || fail "case2: marker lost on re-apply"
 
 # Case 3: merges by default into a non-sandshell file — preserves user keys
 # while applying sandshell's safety keys.
 mkdir -p "$TMPDIR_TEST/case3/.codex"
-cat > "$TMPDIR_TEST/case3/.codex/config.toml" <<'EOF'
+cat > "$TMPDIR_TEST/case3/.codex/config.toml" << 'EOF'
 model = "gpt-5"
 some_user_key = "preserved"
 
 [profiles.work]
 sandbox_mode = "workspace-write"
 EOF
-HOME="$TMPDIR_TEST/case3" "$ROOT/scripts/setup-codex.sh" >/dev/null
+HOME="$TMPDIR_TEST/case3" "$ROOT/scripts/setup-codex.sh" > /dev/null
 merged="$TMPDIR_TEST/case3/.codex/config.toml"
 grep -q '^model = "gpt-5"' "$merged" \
   || fail "case3 (merge): user's 'model' key was not preserved"
@@ -60,7 +60,7 @@ grep -q "Managed by sandshell" "$merged" \
 # Re-apply MUST preserve those — the marker means "we wrote here" not "we
 # own everything in this file". Bug fixed in v0.2.0 polish; regression test.
 mkdir -p "$TMPDIR_TEST/case3b/.codex"
-cat > "$TMPDIR_TEST/case3b/.codex/config.toml" <<'EOF'
+cat > "$TMPDIR_TEST/case3b/.codex/config.toml" << 'EOF'
 # Managed by sandshell — old marker text from earlier version
 
 sandbox_mode = "workspace-write"
@@ -76,7 +76,7 @@ trust_level = "trusted"
 [tui.model_availability_nux]
 "gpt-5.5" = 2
 EOF
-HOME="$TMPDIR_TEST/case3b" "$ROOT/scripts/setup-codex.sh" >/dev/null
+HOME="$TMPDIR_TEST/case3b" "$ROOT/scripts/setup-codex.sh" > /dev/null
 managed_with_extras="$TMPDIR_TEST/case3b/.codex/config.toml"
 grep -q '\[projects\."/some/trusted/project"\]' "$managed_with_extras" \
   || fail "case3b: re-apply lost [projects.\"...\"] (the bug we just fixed)"
@@ -88,17 +88,17 @@ grep -q '"/tmp/already-trusted"' "$managed_with_extras" \
   || fail "case3b: re-apply lost user's writable_roots entries"
 # Re-applying a second time should be idempotent (no further changes).
 sha_before=$(shasum "$managed_with_extras" | awk '{print $1}')
-HOME="$TMPDIR_TEST/case3b" "$ROOT/scripts/setup-codex.sh" >/dev/null
+HOME="$TMPDIR_TEST/case3b" "$ROOT/scripts/setup-codex.sh" > /dev/null
 sha_after=$(shasum "$managed_with_extras" | awk '{print $1}')
 [[ "$sha_before" = "$sha_after" ]] \
   || fail "case3b: re-apply was not idempotent (file changed on second run)"
 
 # Case 4: --force overwrites the existing non-managed file (drops user keys).
 mkdir -p "$TMPDIR_TEST/case4/.codex"
-cat > "$TMPDIR_TEST/case4/.codex/config.toml" <<'EOF'
+cat > "$TMPDIR_TEST/case4/.codex/config.toml" << 'EOF'
 some_user_key = "should-be-gone"
 EOF
-HOME="$TMPDIR_TEST/case4" "$ROOT/scripts/setup-codex.sh" --force >/dev/null
+HOME="$TMPDIR_TEST/case4" "$ROOT/scripts/setup-codex.sh" --force > /dev/null
 forced="$TMPDIR_TEST/case4/.codex/config.toml"
 grep -q "Managed by sandshell" "$forced" \
   || fail "case4 (--force): did not overwrite to sandshell-managed"

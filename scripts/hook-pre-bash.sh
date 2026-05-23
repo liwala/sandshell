@@ -12,7 +12,7 @@ set -euo pipefail
 
 input=$(cat)
 
-if ! command -v jq >/dev/null 2>&1; then
+if ! command -v jq > /dev/null 2>&1; then
   exit 0
 fi
 

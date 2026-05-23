@@ -23,9 +23,11 @@ sandshell_baseline_current() {
 # Write stdin (audit --json output) to a timestamped historical snapshot
 # and refresh current.json to point at it. Echoes the timestamped path.
 sandshell_baseline_write() {
-  local dir; dir="$(sandshell_baseline_dir)"
+  local dir
+  dir="$(sandshell_baseline_dir)"
   mkdir -p "$dir"
-  local ts; ts="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
+  local ts
+  ts="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
   local hist="$dir/audit-$ts.json"
   cat > "$hist"
   cp "$hist" "$dir/current.json"
@@ -39,7 +41,8 @@ sandshell_baseline_write() {
 # Used by apply scripts (after each --snapshot) and by audit-config.sh's
 # drift output to tell the user how thick the trail has gotten.
 sandshell_baseline_summary() {
-  local dir; dir="$(sandshell_baseline_dir)"
+  local dir
+  dir="$(sandshell_baseline_dir)"
   if [[ ! -d "$dir" ]]; then
     echo "no snapshots yet"
     return 0
@@ -47,7 +50,7 @@ sandshell_baseline_summary() {
   local files=()
   while IFS= read -r f; do
     [[ -n "$f" ]] && files+=("$f")
-  done < <(find "$dir" -maxdepth 1 -type f -name 'audit-*.json' 2>/dev/null | sort)
+  done < <(find "$dir" -maxdepth 1 -type f -name 'audit-*.json' 2> /dev/null | sort)
   local count="${#files[@]}"
   local short_dir="${dir/#$HOME/~}"
   if [[ "$count" -eq 0 ]]; then

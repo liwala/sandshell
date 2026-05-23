@@ -27,13 +27,13 @@ emit_finding() {
 managed_settings_path() {
   case "$(uname -s)" in
     Darwin) echo "/Library/Application Support/ClaudeCode/managed-settings.json" ;;
-    Linux)  echo "/etc/claude-code/managed-settings.json" ;;
-    *)      echo "" ;;
+    Linux) echo "/etc/claude-code/managed-settings.json" ;;
+    *) echo "" ;;
   esac
 }
 
 is_claude_present() {
-  command -v claude >/dev/null 2>&1 \
+  command -v claude > /dev/null 2>&1 \
     || [[ -d "$HOME/.claude" ]] \
     || [[ -f "$HOME/.claude.json" ]] \
     || [[ -d ".claude" ]]
@@ -60,7 +60,7 @@ existing_scopes() {
       echo "WARNING: $path exists but is not readable; skipping" >&2
       continue
     fi
-    if ! jq -e . "$path" >/dev/null 2>&1; then
+    if ! jq -e . "$path" > /dev/null 2>&1; then
       echo "WARNING: $path is not valid JSON; skipping" >&2
       continue
     fi
@@ -73,7 +73,7 @@ existing_scopes() {
 check_sandbox_enabled() {
   local scope path
   while read -r scope path; do
-    if jq -e '.sandbox.enabled == true' "$path" >/dev/null 2>&1; then
+    if jq -e '.sandbox.enabled == true' "$path" > /dev/null 2>&1; then
       return 0
     fi
   done < <(existing_scopes)
@@ -92,8 +92,8 @@ check_sandbox_enabled() {
 check_sandbox_silent_disable() {
   local scope path
   while read -r scope path; do
-    if jq -e '.sandbox' "$path" >/dev/null 2>&1; then
-      if ! jq -e '.sandbox.enabled == true' "$path" >/dev/null 2>&1; then
+    if jq -e '.sandbox' "$path" > /dev/null 2>&1; then
+      if ! jq -e '.sandbox.enabled == true' "$path" > /dev/null 2>&1; then
         emit_finding \
           "cc.sandbox.silent_disable" \
           "critical" \
@@ -119,7 +119,7 @@ check_sandbox_legacy_schema() {
       (.sandbox.filesystem.write.allowOnly // null) != null
       or (.sandbox.filesystem.read.denyOnly // null) != null
       or (.sandbox.network.allowedHosts // null) != null
-    ' "$path" >/dev/null 2>&1 || continue
+    ' "$path" > /dev/null 2>&1 || continue
 
     emit_finding \
       "cc.sandbox.legacy_schema" \
@@ -137,9 +137,9 @@ check_sandbox_legacy_schema() {
 check_sandbox_write_scope() {
   local scope path broad
   while read -r scope path; do
-    jq -e '.sandbox.filesystem.allowWrite' "$path" >/dev/null 2>&1 || continue
-    broad=$(jq -r '.sandbox.filesystem.allowWrite[]?' "$path" 2>/dev/null \
-            | grep -E '^(/|~|\$HOME|\*)$' | head -1 || true)
+    jq -e '.sandbox.filesystem.allowWrite' "$path" > /dev/null 2>&1 || continue
+    broad=$(jq -r '.sandbox.filesystem.allowWrite[]?' "$path" 2> /dev/null \
+      | grep -E '^(/|~|\$HOME|\*)$' | head -1 || true)
     if [[ -n "$broad" ]]; then
       emit_finding \
         "cc.sandbox.write_scope" \
@@ -157,9 +157,9 @@ check_sandbox_network_allowlist() {
   local scope path
   while read -r scope path; do
     # Only check scopes where sandbox is actually enabled.
-    jq -e '.sandbox.enabled == true' "$path" >/dev/null 2>&1 || continue
+    jq -e '.sandbox.enabled == true' "$path" > /dev/null 2>&1 || continue
 
-    if ! jq -e '.sandbox.network.allowedDomains' "$path" >/dev/null 2>&1; then
+    if ! jq -e '.sandbox.network.allowedDomains' "$path" > /dev/null 2>&1; then
       emit_finding \
         "cc.sandbox.network_allowlist" \
         "medium" \
@@ -169,7 +169,7 @@ check_sandbox_network_allowlist() {
         "Note: Claude Code's macOS network proxy has an open bug (#37970) where allowedDomains may not enforce reliably for Bash subprocesses. See KNOWN_ISSUES.md."
       continue
     fi
-    if jq -e '.sandbox.network.allowedDomains == []' "$path" >/dev/null 2>&1; then
+    if jq -e '.sandbox.network.allowedDomains == []' "$path" > /dev/null 2>&1; then
       emit_finding \
         "cc.sandbox.network_allowlist_empty" \
         "high" \
@@ -179,7 +179,7 @@ check_sandbox_network_allowlist() {
         "Empty allowlists are not reliably interpreted as deny-all. Note also: macOS network enforcement is affected by upstream bug claude-code#37970 — see KNOWN_ISSUES.md."
       continue
     fi
-    if jq -e '.sandbox.network.allowedDomains | index("*")' "$path" >/dev/null 2>&1; then
+    if jq -e '.sandbox.network.allowedDomains | index("*")' "$path" > /dev/null 2>&1; then
       emit_finding \
         "cc.sandbox.network_allowlist" \
         "medium" \
@@ -196,12 +196,12 @@ check_sandbox_network_allowlist() {
 check_sandbox_deny_disable_flag() {
   local scope path
   while read -r scope path; do
-    jq -e '.sandbox.enabled == true' "$path" >/dev/null 2>&1 || continue
+    jq -e '.sandbox.enabled == true' "$path" > /dev/null 2>&1 || continue
     if ! jq -e '
       (.permissions.deny // [])
       | map(select(test("dangerouslyDisableSandbox"; "i")))
       | length > 0
-    ' "$path" >/dev/null 2>&1; then
+    ' "$path" > /dev/null 2>&1; then
       emit_finding \
         "cc.sandbox.deny_disable_flag" \
         "high" \
@@ -221,12 +221,12 @@ check_sandbox_strict_reads() {
   local scope path
   local missing_scopes=()
   while read -r scope path; do
-    jq -e '.sandbox.enabled == true' "$path" >/dev/null 2>&1 || continue
+    jq -e '.sandbox.enabled == true' "$path" > /dev/null 2>&1 || continue
     if ! jq -e '
       (.sandbox.filesystem.denyRead // [])
       | map(select(test("\\.ssh|\\.aws|\\.gnupg|\\.kube"; "i")))
       | length > 0
-    ' "$path" >/dev/null 2>&1; then
+    ' "$path" > /dev/null 2>&1; then
       missing_scopes+=("$scope")
     fi
   done < <(existing_scopes)
@@ -256,8 +256,8 @@ check_sandbox_strict_reads() {
 check_permissions_no_wildcard_bash() {
   local scope path bad
   while read -r scope path; do
-    bad=$(jq -r '.permissions.allow[]?' "$path" 2>/dev/null \
-          | grep -E '^Bash($|\(\)$|\(\*\)$|\(\*:.*\)$)' | head -1 || true)
+    bad=$(jq -r '.permissions.allow[]?' "$path" 2> /dev/null \
+      | grep -E '^Bash($|\(\)$|\(\*\)$|\(\*:.*\)$)' | head -1 || true)
     if [[ -n "$bad" ]]; then
       emit_finding \
         "cc.permissions.no_wildcard_bash" \
@@ -274,8 +274,8 @@ check_permissions_no_wildcard_bash() {
 check_permissions_no_curl_pipe_sh() {
   local scope path bad
   while read -r scope path; do
-    bad=$(jq -r '.permissions.allow[]?' "$path" 2>/dev/null \
-          | grep -E 'Bash\(.*(curl|wget).*(\||\$\().*(sh|bash).*\)' | head -1 || true)
+    bad=$(jq -r '.permissions.allow[]?' "$path" 2> /dev/null \
+      | grep -E 'Bash\(.*(curl|wget).*(\||\$\().*(sh|bash).*\)' | head -1 || true)
     if [[ -n "$bad" ]]; then
       emit_finding \
         "cc.permissions.no_curl_pipe_sh" \
@@ -298,7 +298,7 @@ check_hooks_pre_bash() {
       | map(.hooks[]? | .command // "")
       | map(select(test("hook-pre-bash\\.sh"; "i")))
       | length > 0
-    ' "$path" >/dev/null 2>&1; then
+    ' "$path" > /dev/null 2>&1; then
       return 0
     fi
   done < <(existing_scopes)
@@ -323,7 +323,7 @@ check_hooks_post_bash() {
       | map(.hooks[]? | .command // "")
       | map(select(test("hook-post-bash\\.sh"; "i")))
       | length > 0
-    ' "$path" >/dev/null 2>&1; then
+    ' "$path" > /dev/null 2>&1; then
       return 0
     fi
   done < <(existing_scopes)
@@ -345,7 +345,7 @@ check_hooks_post_bash() {
 check_mcp_curated() {
   local known="$HOME/.sandshell/known-mcps.json"
   [[ -f "$known" ]] || return 0
-  jq -e 'type == "array"' "$known" >/dev/null 2>&1 || {
+  jq -e 'type == "array"' "$known" > /dev/null 2>&1 || {
     echo "WARNING: $known is not a JSON array; skipping MCP curation check" >&2
     return 0
   }
@@ -354,10 +354,10 @@ check_mcp_curated() {
   # Source 1: ~/.claude.json — anywhere a "mcpServers" key appears.
   # Source 2: project-root .mcp.json — a top-level mcpServers object.
   local user_claude="$HOME/.claude.json"
-  if [[ -f "$user_claude" ]] && jq -e . "$user_claude" >/dev/null 2>&1; then
+  if [[ -f "$user_claude" ]] && jq -e . "$user_claude" > /dev/null 2>&1; then
     while IFS= read -r name; do
       [[ -z "$name" ]] && continue
-      if ! jq -e --arg n "$name" 'index($n)' "$known" >/dev/null 2>&1; then
+      if ! jq -e --arg n "$name" 'index($n)' "$known" > /dev/null 2>&1; then
         emit_finding \
           "cc.mcp.curated" \
           "medium" \
@@ -365,12 +365,12 @@ check_mcp_curated() {
           "$user_claude" \
           "Review the server; add to ~/.sandshell/known-mcps.json if trusted, or remove via 'claude mcp remove $name'"
       fi
-    done < <(jq -r '[.. | objects | select(has("mcpServers")) | .mcpServers | keys[]?] | unique[]?' "$user_claude" 2>/dev/null)
+    done < <(jq -r '[.. | objects | select(has("mcpServers")) | .mcpServers | keys[]?] | unique[]?' "$user_claude" 2> /dev/null)
   fi
-  if [[ -f ".mcp.json" ]] && jq -e . ".mcp.json" >/dev/null 2>&1; then
+  if [[ -f ".mcp.json" ]] && jq -e . ".mcp.json" > /dev/null 2>&1; then
     while IFS= read -r name; do
       [[ -z "$name" ]] && continue
-      if ! jq -e --arg n "$name" 'index($n)' "$known" >/dev/null 2>&1; then
+      if ! jq -e --arg n "$name" 'index($n)' "$known" > /dev/null 2>&1; then
         emit_finding \
           "cc.mcp.curated" \
           "medium" \
@@ -378,7 +378,7 @@ check_mcp_curated() {
           ".mcp.json" \
           "Review the server; add to ~/.sandshell/known-mcps.json if trusted, or remove from .mcp.json"
       fi
-    done < <(jq -r '.mcpServers // {} | keys[]?' ".mcp.json" 2>/dev/null)
+    done < <(jq -r '.mcpServers // {} | keys[]?' ".mcp.json" 2> /dev/null)
   fi
 }
 
@@ -388,7 +388,7 @@ check_mcp_curated() {
 check_mcp_project_auto_approve() {
   local scope path
   while read -r scope path; do
-    if jq -e '.enableAllProjectMcpServers == true' "$path" >/dev/null 2>&1; then
+    if jq -e '.enableAllProjectMcpServers == true' "$path" > /dev/null 2>&1; then
       emit_finding \
         "cc.mcp.project_auto_approve" \
         "high" \
@@ -411,13 +411,13 @@ check_permissions_review() {
   local scope_summary=""
   local details=""
   while read -r scope path; do
-    count=$(jq -r '(.permissions.allow // []) | length' "$path" 2>/dev/null || echo 0)
+    count=$(jq -r '(.permissions.allow // []) | length' "$path" 2> /dev/null || echo 0)
     [[ "$count" == "0" ]] && continue
     total=$((total + count))
     [[ -n "$scope_summary" ]] && scope_summary+=", "
     scope_summary+="$scope ($count)"
     local list
-    list=$(jq -r '(.permissions.allow // []) | join(", ")' "$path" 2>/dev/null)
+    list=$(jq -r '(.permissions.allow // []) | join(", ")' "$path" 2> /dev/null)
     [[ -n "$details" ]] && details+=$'\n'
     details+="$scope: $list"
   done < <(existing_scopes)

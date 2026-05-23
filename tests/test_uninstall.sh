@@ -10,7 +10,7 @@ trap 'rm -rf "$TMPDIR_TEST"' EXIT
 mkdir -p "$TMPDIR_TEST/project/.claude/skills/sandshell" "$TMPDIR_TEST/project/.codex/skills/sandshell"
 export HOME="$TMPDIR_TEST/home"
 
-cat > "$TMPDIR_TEST/project/.claude/settings.json" <<'EOF'
+cat > "$TMPDIR_TEST/project/.claude/settings.json" << 'EOF'
 {
   "sandshell_managed": true,
   "sandbox": {
@@ -60,7 +60,7 @@ cat > "$TMPDIR_TEST/project/.claude/settings.json" <<'EOF'
 }
 EOF
 
-cat > "$TMPDIR_TEST/project/GEMINI.md" <<'EOF'
+cat > "$TMPDIR_TEST/project/GEMINI.md" << 'EOF'
 before
 <!-- sandshell: begin -->
 remove me
@@ -68,7 +68,7 @@ remove me
 after
 EOF
 
-cat > "$TMPDIR_TEST/project/AGENTS.md" <<'EOF'
+cat > "$TMPDIR_TEST/project/AGENTS.md" << 'EOF'
 before
 <!-- sandshell: begin -->
 remove me
@@ -76,13 +76,13 @@ remove me
 after
 EOF
 
-cat > "$TMPDIR_TEST/project/SANDSHELL.md" <<'EOF'
+cat > "$TMPDIR_TEST/project/SANDSHELL.md" << 'EOF'
 generated
 EOF
 
 (
   cd "$TMPDIR_TEST/project"
-  "$ROOT/scripts/uninstall.sh" project --remove-agent-installs >/dev/null
+  "$ROOT/scripts/uninstall.sh" project --remove-agent-installs > /dev/null
 )
 
 SETTINGS_FILE="$TMPDIR_TEST/project/.claude/settings.json"

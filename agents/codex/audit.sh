@@ -7,7 +7,7 @@
 set -uo pipefail
 
 is_codex_present() {
-  command -v codex >/dev/null 2>&1 || [[ -d "$HOME/.codex" ]]
+  command -v codex > /dev/null 2>&1 || [[ -d "$HOME/.codex" ]]
 }
 
 if ! is_codex_present; then
@@ -32,7 +32,7 @@ if [[ ! -f "$CONFIG" ]]; then
   exit 0
 fi
 
-exec python3 - "$CONFIG" <<'PY'
+exec python3 - "$CONFIG" << 'PY'
 import json, sys, os
 
 config_path = sys.argv[1]

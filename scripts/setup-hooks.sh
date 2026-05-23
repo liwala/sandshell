@@ -28,7 +28,7 @@ case "$SCOPE" in
     SETTINGS_FILE="$SETTINGS_DIR/settings.json"
     echo "Installing sandshell hooks (project scope: this project only)"
     ;;
-  --help|-h|help)
+  --help | -h | help)
     echo "Usage: setup-hooks.sh [user|project]"
     echo ""
     echo "  user      Install to ~/.claude/settings.json (default; was 'personal' in v0.1)"
@@ -47,7 +47,7 @@ case "$SCOPE" in
 esac
 
 # Check for jq
-if ! command -v jq >/dev/null 2>&1; then
+if ! command -v jq > /dev/null 2>&1; then
   echo "ERROR: jq is required for hooks. Install it:" >&2
   echo "  macOS:  brew install jq" >&2
   echo "  Linux:  apt-get install jq" >&2
@@ -57,7 +57,8 @@ fi
 mkdir -p "$SETTINGS_DIR"
 
 # The hooks we want to add
-POST_HOOK_CONFIG=$(cat <<EOF
+POST_HOOK_CONFIG=$(
+  cat << EOF
 {
   "matcher": "Bash",
   "hooks": [
@@ -71,7 +72,8 @@ POST_HOOK_CONFIG=$(cat <<EOF
 EOF
 )
 
-PRE_HOOK_CONFIG=$(cat <<EOF
+PRE_HOOK_CONFIG=$(
+  cat << EOF
 {
   "matcher": "Bash",
   "hooks": [
@@ -89,8 +91,8 @@ sandshell_diff_snapshot "$SETTINGS_FILE"
 
 if [[ -f "$SETTINGS_FILE" ]]; then
   # Check if sandshell hooks already exist
-  if grep -q "hook-post-bash.sh" "$SETTINGS_FILE" 2>/dev/null && \
-     grep -q "hook-pre-bash.sh" "$SETTINGS_FILE" 2>/dev/null; then
+  if grep -q "hook-post-bash.sh" "$SETTINGS_FILE" 2> /dev/null \
+    && grep -q "hook-pre-bash.sh" "$SETTINGS_FILE" 2> /dev/null; then
     echo "sandshell hooks already configured in $SETTINGS_FILE"
     sandshell_diff_show "$SETTINGS_FILE"
     exit 0

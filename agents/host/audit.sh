@@ -66,7 +66,7 @@ check_shell_alias_bypass() {
           "$rc:$lineno" \
           "Remove '$flag_match' from the alias in $rc"
       fi
-    done < <(grep -nE "alias[[:space:]]+($agents)=" "$rc" 2>/dev/null || true)
+    done < <(grep -nE "alias[[:space:]]+($agents)=" "$rc" 2> /dev/null || true)
   done < <(shell_rc_files)
 }
 
@@ -163,7 +163,7 @@ check_shell_function_bypass() {
       END {
         # Drop any unterminated capture silently.
       }
-    ' "$rc" 2>/dev/null || true)
+    ' "$rc" 2> /dev/null || true)
   done < <(shell_rc_files)
 }
 
@@ -193,7 +193,7 @@ check_env_bypass_var() {
         "Persistent env var bypasses agent safety: $var" \
         "$rc:$lineno" \
         "Remove the export from $rc"
-    done < <(grep -nE "(export[[:space:]]+)?($bypass_vars)=" "$rc" 2>/dev/null || true)
+    done < <(grep -nE "(export[[:space:]]+)?($bypass_vars)=" "$rc" 2> /dev/null || true)
   done < <(shell_rc_files)
 }
 
@@ -241,7 +241,7 @@ classify_cred_rhs() {
   if [[ "$rhs" =~ ^\$\([[:space:]]*([A-Za-z][A-Za-z0-9_-]*) ]]; then
     local cmd="${BASH_REMATCH[1]}"
     case "$cmd" in
-      op|aws-vault|vault|pass|bw|chamber|infisical|lpass|sops|teller|security|keyring|gh|glab)
+      op | aws-vault | vault | pass | bw | chamber | infisical | lpass | sops | teller | security | keyring | gh | glab)
         echo "vault:$cmd"
         return
         ;;
@@ -324,8 +324,8 @@ check_creds_in_shell_rc() {
 
       # AWS: if AWS_SESSION_TOKEN is paired in the same file, the credential
       # is STS/SSO (short-lived) regardless of how it was injected. Skip.
-      if [[ "$var" == "AWS_ACCESS_KEY_ID" ]] && \
-         grep -qE "(export[[:space:]]+)?AWS_SESSION_TOKEN=" "$rc" 2>/dev/null; then
+      if [[ "$var" == "AWS_ACCESS_KEY_ID" ]] \
+        && grep -qE "(export[[:space:]]+)?AWS_SESSION_TOKEN=" "$rc" 2> /dev/null; then
         continue
       fi
 
@@ -334,7 +334,8 @@ check_creds_in_shell_rc() {
       # leading characters).
       rhs="${rhs%%#*}"
 
-      local kind; kind="$(classify_cred_rhs "$rhs")"
+      local kind
+      kind="$(classify_cred_rhs "$rhs")"
       case "$kind" in
         literal)
           emit_finding \
@@ -371,7 +372,7 @@ check_creds_in_shell_rc() {
           continue
           ;;
       esac
-    done < <(grep -nE "(export[[:space:]]+)?($cred_vars|$cred_suffix_pattern)=" "$rc" 2>/dev/null || true)
+    done < <(grep -nE "(export[[:space:]]+)?($cred_vars|$cred_suffix_pattern)=" "$rc" 2> /dev/null || true)
   done < <(shell_rc_files)
 }
 
@@ -382,7 +383,7 @@ check_native_sandbox_available() {
   os="$(uname -s)"
   case "$os" in
     Darwin)
-      if ! command -v sandbox-exec >/dev/null 2>&1; then
+      if ! command -v sandbox-exec > /dev/null 2>&1; then
         emit_finding \
           "host.native_sandbox_available" \
           "medium" \
@@ -392,7 +393,7 @@ check_native_sandbox_available() {
       fi
       ;;
     Linux)
-      if ! command -v bwrap >/dev/null 2>&1; then
+      if ! command -v bwrap > /dev/null 2>&1; then
         emit_finding \
           "host.native_sandbox_available" \
           "medium" \
@@ -415,10 +416,10 @@ check_native_sandbox_available() {
 # ---------- host.cwd_is_git_repo ----------
 # The agent's working directory should be a git repo so changes are reviewable.
 check_cwd_is_git_repo() {
-  if ! command -v git >/dev/null 2>&1; then
-    return 0  # No git installed; can't check, don't fire spurious finding.
+  if ! command -v git > /dev/null 2>&1; then
+    return 0 # No git installed; can't check, don't fire spurious finding.
   fi
-  if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  if ! git rev-parse --is-inside-work-tree > /dev/null 2>&1; then
     emit_finding \
       "host.cwd_is_git_repo" \
       "info" \
@@ -435,14 +436,14 @@ check_cwd_is_git_repo() {
 check_repo_provenance() {
   local known_repos="$HOME/.sandshell/known-repos.json"
   [[ -f "$known_repos" ]] || return 0
-  command -v git >/dev/null 2>&1 || return 0
-  git rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 0
+  command -v git > /dev/null 2>&1 || return 0
+  git rev-parse --is-inside-work-tree > /dev/null 2>&1 || return 0
 
   local remote
-  remote="$(git remote get-url origin 2>/dev/null || true)"
+  remote="$(git remote get-url origin 2> /dev/null || true)"
   [[ -z "$remote" ]] && return 0
 
-  if ! jq -e --arg r "$remote" 'index($r)' "$known_repos" >/dev/null 2>&1; then
+  if ! jq -e --arg r "$remote" 'index($r)' "$known_repos" > /dev/null 2>&1; then
     emit_finding \
       "host.repo_provenance" \
       "info" \

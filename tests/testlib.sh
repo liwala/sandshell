@@ -29,7 +29,8 @@ assert_json_value() {
   local file="$1" expr="$2" expected="$3"
   [[ -f "$file" ]] || fail "Missing file: $file"
   local actual
-  actual=$(python3 - "$file" "$expr" <<'PY'
+  actual=$(
+    python3 - "$file" "$expr" << 'PY'
 import json
 import sys
 
@@ -48,7 +49,7 @@ elif value is None:
 else:
     print(value)
 PY
-)
+  )
   [[ "$actual" == "$expected" ]] || fail "Expected $expr=$expected in $file, got $actual"
 }
 

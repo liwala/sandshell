@@ -19,7 +19,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPT_DIR/lib/diff-apply.sh"
 
 usage() {
-  cat <<EOF
+  cat << EOF
 Usage: setup-gemini.sh [user|project] [--show]
 
   user      Install to ~/.gemini/settings.json (default)
@@ -47,26 +47,45 @@ SHOW_ONLY=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    user|project)   SCOPE="$1"; shift ;;
+    user | project)
+      SCOPE="$1"
+      shift
+      ;;
     workspace)
       SCOPE="project"
       echo "Note: 'workspace' is the legacy name for 'project' — both still accepted." >&2
       shift
       ;;
-    --show)         SHOW_ONLY=true; shift ;;
-    -h|--help|help) usage; exit 0 ;;
-    *) echo "Unknown option: $1" >&2; usage >&2; exit 1 ;;
+    --show)
+      SHOW_ONLY=true
+      shift
+      ;;
+    -h | --help | help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $1" >&2
+      usage >&2
+      exit 1
+      ;;
   esac
 done
 
-if ! command -v jq >/dev/null 2>&1; then
+if ! command -v jq > /dev/null 2>&1; then
   echo "ERROR: jq is required. Install it (brew install jq / apt install jq)." >&2
   exit 1
 fi
 
 case "$SCOPE" in
-  user)    SETTINGS_DIR="$HOME/.gemini"; SETTINGS_FILE="$SETTINGS_DIR/settings.json" ;;
-  project) SETTINGS_DIR=".gemini";       SETTINGS_FILE="$SETTINGS_DIR/settings.json" ;;
+  user)
+    SETTINGS_DIR="$HOME/.gemini"
+    SETTINGS_FILE="$SETTINGS_DIR/settings.json"
+    ;;
+  project)
+    SETTINGS_DIR=".gemini"
+    SETTINGS_FILE="$SETTINGS_DIR/settings.json"
+    ;;
 esac
 
 # Pick the right tools.sandbox value for this OS.
@@ -94,10 +113,10 @@ case "$os_name" in
     sandbox_note="Seatbelt; filesystem ✓, network broken upstream"
     ;;
   Linux)
-    if command -v docker >/dev/null 2>&1; then
+    if command -v docker > /dev/null 2>&1; then
       sandbox_value="docker"
       sandbox_note="Docker container with --internal network when sandboxNetworkAccess=false"
-    elif command -v podman >/dev/null 2>&1; then
+    elif command -v podman > /dev/null 2>&1; then
       sandbox_value="podman"
       sandbox_note="Podman container with --internal network when sandboxNetworkAccess=false"
     else
@@ -162,7 +181,7 @@ mkdir -p "$SETTINGS_DIR"
 sandshell_diff_snapshot "$SETTINGS_FILE"
 
 if [[ -f "$SETTINGS_FILE" ]]; then
-  if grep -q '"sandshell_managed"' "$SETTINGS_FILE" 2>/dev/null; then
+  if grep -q '"sandshell_managed"' "$SETTINGS_FILE" 2> /dev/null; then
     echo "Updating existing sandshell-managed config in $SETTINGS_FILE"
   fi
   existing=$(cat "$SETTINGS_FILE")
@@ -203,7 +222,7 @@ fi
 echo ""
 sandshell_diff_show "$SETTINGS_FILE"
 
-cat <<EOF
+cat << EOF
 
 Gemini safe defaults written to $SETTINGS_FILE
 
@@ -218,7 +237,7 @@ EOF
 
 case "$os_name" in
   Darwin)
-    cat <<'EOF'
+    cat << 'EOF'
   - Filesystem isolation: YES (Seatbelt via tools.sandbox=sandbox-exec)
 
 What this DOES NOT enforce on macOS today:
@@ -233,12 +252,12 @@ EOF
     ;;
   Linux)
     if [[ -n "$sandbox_value" ]]; then
-      cat <<EOF
+      cat << EOF
   - Filesystem + network isolation: YES via $sandbox_value container
     (--internal network when sandboxNetworkAccess=false)
 EOF
     else
-      cat <<'EOF'
+      cat << 'EOF'
   - Sandboxing: NOT CONFIGURED. Gemini on Linux requires docker, podman, lxc,
     or runsc — none detected on this host. Install one and re-run
     'sandshell apply gemini' to enable sandboxing.
@@ -246,13 +265,13 @@ EOF
     fi
     ;;
   *)
-    cat <<EOF
+    cat << EOF
   - Sandboxing: NOT CONFIGURED for OS '$os_name'. Manual configuration required.
 EOF
     ;;
 esac
 
-cat <<EOF
+cat << EOF
 
 VERIFY in any new Gemini session, run:
   echo test > "\$HOME/sandshell-probe.txt"
@@ -263,7 +282,7 @@ EOF
 
 # Refresh the drift baseline so the next 'sandshell audit' compares against
 # this post-apply state.
-"$SCRIPT_DIR/audit-config.sh" --snapshot --no-drift --json >/dev/null 2>&1 || true
+"$SCRIPT_DIR/audit-config.sh" --snapshot --no-drift --json > /dev/null 2>&1 || true
 # shellcheck source=lib/baseline.sh
 . "$SCRIPT_DIR/lib/baseline.sh"
 echo "Baseline saved. $(sandshell_baseline_summary)."

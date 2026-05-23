@@ -32,18 +32,37 @@ SKIP_HOOKS=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    user|project) SCOPE="$1"; shift ;;
+    user | project)
+      SCOPE="$1"
+      shift
+      ;;
     personal)
       SCOPE="user"
       echo "Note: 'personal' is the legacy name for 'user' — both still accepted." >&2
       shift
       ;;
-    --profile=*)      PROFILE="${1#*=}"; EXTRA_ARGS+=("$1"); shift ;;
-    --strict)         EXTRA_ARGS+=("--strict"); shift ;;
-    --skip-sandbox)   SKIP_SANDBOX=true; shift ;;
-    --skip-hooks)     SKIP_HOOKS=true; shift ;;
-    --help|-h|help)   usage ;;
-    *)                echo "Unknown option: $1" >&2; exit 1 ;;
+    --profile=*)
+      PROFILE="${1#*=}"
+      EXTRA_ARGS+=("$1")
+      shift
+      ;;
+    --strict)
+      EXTRA_ARGS+=("--strict")
+      shift
+      ;;
+    --skip-sandbox)
+      SKIP_SANDBOX=true
+      shift
+      ;;
+    --skip-hooks)
+      SKIP_HOOKS=true
+      shift
+      ;;
+    --help | -h | help) usage ;;
+    *)
+      echo "Unknown option: $1" >&2
+      exit 1
+      ;;
   esac
 done
 
@@ -77,7 +96,7 @@ echo "Setup complete!"
 echo ""
 echo "Protection layers active:"
 [[ "$SKIP_SANDBOX" = false ]] && echo "  [x] Native OS sandbox (kernel-enforced filesystem; macOS network is broken upstream — see KNOWN_ISSUES.md)"
-[[ "$SKIP_HOOKS" = false ]]   && echo "  [x] Audit hooks (Bash command audit-trail to ~/.sandshell/audit/)"
+[[ "$SKIP_HOOKS" = false ]] && echo "  [x] Audit hooks (Bash command audit-trail to ~/.sandshell/audit/)"
 echo ""
 echo "Verify filesystem enforcement in any new Claude Code session:"
 echo "  echo test > \"\$HOME/sandshell-probe.txt\"   # should fail: Operation not permitted"
@@ -93,7 +112,7 @@ echo "--summary' for a one-line-per-agent rollup."
 
 # Refresh the drift baseline so the next 'sandshell audit' compares against
 # this post-apply state. Silent on success; warnings (if any) go to stderr.
-"$SCRIPT_DIR/audit-config.sh" --snapshot --no-drift --json >/dev/null 2>&1 || true
+"$SCRIPT_DIR/audit-config.sh" --snapshot --no-drift --json > /dev/null 2>&1 || true
 # shellcheck source=lib/baseline.sh
 . "$SCRIPT_DIR/lib/baseline.sh"
 echo "Baseline saved. $(sandshell_baseline_summary)."

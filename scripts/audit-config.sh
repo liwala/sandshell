@@ -35,7 +35,7 @@ DRIFT_ONLY=false
 PRUNE_KEEP=""
 
 usage() {
-  cat <<EOF
+  cat << EOF
 Usage: audit-config.sh [--json | --summary | --drift-only] [--strict] [--snapshot] [--no-drift] [--prune[=N]]
 
   --json        Emit findings (and drift) as JSON (machine-readable)
@@ -59,16 +59,47 @@ EOF
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --json)        JSON_OUTPUT=true; shift ;;
-    --summary)     SUMMARY=true; shift ;;
-    --drift-only)  DRIFT_ONLY=true; shift ;;
-    --strict)      STRICT=true; shift ;;
-    --snapshot)    SNAPSHOT=true; shift ;;
-    --no-drift)    NO_DRIFT=true; shift ;;
-    --prune)       PRUNE_KEEP="10"; shift ;;
-    --prune=*)     PRUNE_KEEP="${1#*=}"; shift ;;
-    -h|--help|help) usage; exit 0 ;;
-    *) echo "Unknown option: $1" >&2; usage >&2; exit 1 ;;
+    --json)
+      JSON_OUTPUT=true
+      shift
+      ;;
+    --summary)
+      SUMMARY=true
+      shift
+      ;;
+    --drift-only)
+      DRIFT_ONLY=true
+      shift
+      ;;
+    --strict)
+      STRICT=true
+      shift
+      ;;
+    --snapshot)
+      SNAPSHOT=true
+      shift
+      ;;
+    --no-drift)
+      NO_DRIFT=true
+      shift
+      ;;
+    --prune)
+      PRUNE_KEEP="10"
+      shift
+      ;;
+    --prune=*)
+      PRUNE_KEEP="${1#*=}"
+      shift
+      ;;
+    -h | --help | help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $1" >&2
+      usage >&2
+      exit 1
+      ;;
   esac
 done
 
@@ -80,15 +111,15 @@ if [[ -n "$PRUNE_KEEP" ]]; then
 fi
 
 modes=0
-$JSON_OUTPUT && modes=$((modes+1))
-$SUMMARY && modes=$((modes+1))
-$DRIFT_ONLY && modes=$((modes+1))
+$JSON_OUTPUT && modes=$((modes + 1))
+$SUMMARY && modes=$((modes + 1))
+$DRIFT_ONLY && modes=$((modes + 1))
 if [[ "$modes" -gt 1 ]]; then
   echo "ERROR: --json, --summary, and --drift-only are mutually exclusive" >&2
   exit 1
 fi
 
-if ! command -v python3 >/dev/null 2>&1; then
+if ! command -v python3 > /dev/null 2>&1; then
   echo "ERROR: python3 is required for audit." >&2
   exit 1
 fi
@@ -106,7 +137,7 @@ for adapter in "$ADAPTERS_DIR"/*/audit.sh; do
   if [[ -x "$adapter" ]]; then
     agent_name="$(basename "$(dirname "$adapter")")"
     ran_adapters+=("$agent_name")
-    if ! "$adapter" >> "$findings_file" 2>/dev/null; then
+    if ! "$adapter" >> "$findings_file" 2> /dev/null; then
       echo "WARNING: adapter for '$agent_name' exited non-zero; findings may be incomplete" >&2
     fi
   fi
@@ -147,7 +178,7 @@ python3 - \
   "$baseline_dir/current.json" \
   "$baseline_summary_line" \
   "$PRUNE_KEEP" \
-  "${ran_adapters[*]:-}" <<'PY'
+  "${ran_adapters[*]:-}" << 'PY'
 import json, os, sys
 from datetime import datetime, timezone
 

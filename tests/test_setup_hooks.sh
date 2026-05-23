@@ -10,7 +10,7 @@ trap 'rm -rf "$TMPDIR_TEST"' EXIT
 mkdir -p "$TMPDIR_TEST/project/.claude"
 export HOME="$TMPDIR_TEST/home"
 
-cat > "$TMPDIR_TEST/project/.claude/settings.json" <<'EOF'
+cat > "$TMPDIR_TEST/project/.claude/settings.json" << 'EOF'
 {
   "sandbox": {
     "network": {
@@ -35,7 +35,7 @@ EOF
 
 (
   cd "$TMPDIR_TEST/project"
-  "$ROOT/scripts/setup-hooks.sh" project >/dev/null
+  "$ROOT/scripts/setup-hooks.sh" project > /dev/null
 )
 
 SETTINGS_FILE="$TMPDIR_TEST/project/.claude/settings.json"
@@ -46,7 +46,8 @@ assert_json_value "$SETTINGS_FILE" "hooks.PreToolUse.0.hooks.0.command" "$ROOT/s
 assert_json_value "$SETTINGS_FILE" "hooks.PostToolUse.1.matcher" "Bash"
 assert_json_value "$SETTINGS_FILE" "hooks.PostToolUse.1.hooks.0.command" "$ROOT/scripts/hook-post-bash.sh"
 
-before_hash=$(python3 - "$SETTINGS_FILE" <<'PY'
+before_hash=$(
+  python3 - "$SETTINGS_FILE" << 'PY'
 import hashlib
 import sys
 print(hashlib.sha256(open(sys.argv[1], 'rb').read()).hexdigest())
@@ -54,9 +55,10 @@ PY
 )
 (
   cd "$TMPDIR_TEST/project"
-  "$ROOT/scripts/setup-hooks.sh" project >/dev/null
+  "$ROOT/scripts/setup-hooks.sh" project > /dev/null
 )
-after_hash=$(python3 - "$SETTINGS_FILE" <<'PY'
+after_hash=$(
+  python3 - "$SETTINGS_FILE" << 'PY'
 import hashlib
 import sys
 print(hashlib.sha256(open(sys.argv[1], 'rb').read()).hexdigest())

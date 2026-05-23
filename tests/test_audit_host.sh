@@ -12,7 +12,7 @@ ADAPTER="$ROOT/agents/host/audit.sh"
 run_host() {
   local home="$1" cwd="$2"
   mkdir -p "$home" "$cwd"
-  (cd "$cwd" && HOME="$home" "$ADAPTER" 2>/dev/null)
+  (cd "$cwd" && HOME="$home" "$ADAPTER" 2> /dev/null)
 }
 
 assert_finding() {
@@ -30,7 +30,7 @@ assert_no_finding() {
 
 # Case 1: shell_alias_bypass fires on a bypass alias.
 mkdir -p "$TMPDIR_TEST/case1/home"
-cat > "$TMPDIR_TEST/case1/home/.zshrc" <<'EOF'
+cat > "$TMPDIR_TEST/case1/home/.zshrc" << 'EOF'
 alias claude='claude --dangerously-skip-permissions'
 EOF
 out=$(run_host "$TMPDIR_TEST/case1/home" "$TMPDIR_TEST/case1/cwd")
@@ -38,7 +38,7 @@ assert_finding "$out" "host.shell_alias_bypass"
 
 # Case 2: env_bypass_var fires on persistent bypass export.
 mkdir -p "$TMPDIR_TEST/case2/home"
-cat > "$TMPDIR_TEST/case2/home/.zshrc" <<'EOF'
+cat > "$TMPDIR_TEST/case2/home/.zshrc" << 'EOF'
 export CLAUDE_DANGEROUSLY_SKIP_PERMISSIONS=1
 EOF
 out=$(run_host "$TMPDIR_TEST/case2/home" "$TMPDIR_TEST/case2/cwd")
@@ -47,7 +47,7 @@ assert_finding "$out" "host.env_bypass_var"
 # Case 3: literal cred export emits creds_in_shell_rc at medium with
 # source=literal in details.
 mkdir -p "$TMPDIR_TEST/case3/home"
-cat > "$TMPDIR_TEST/case3/home/.zshrc" <<'EOF'
+cat > "$TMPDIR_TEST/case3/home/.zshrc" << 'EOF'
 export AWS_ACCESS_KEY_ID=AKIAFAKE
 EOF
 out=$(run_host "$TMPDIR_TEST/case3/home" "$TMPDIR_TEST/case3/cwd")
@@ -59,7 +59,7 @@ echo "$out" | grep -q "source: literal value" \
 
 # Case 4: AWS_SESSION_TOKEN suppresses the AWS finding (treats as STS/SSO).
 mkdir -p "$TMPDIR_TEST/case4/home"
-cat > "$TMPDIR_TEST/case4/home/.zshrc" <<'EOF'
+cat > "$TMPDIR_TEST/case4/home/.zshrc" << 'EOF'
 export AWS_ACCESS_KEY_ID=AKIAFAKE
 export AWS_SESSION_TOKEN=fake-session
 EOF
@@ -83,7 +83,7 @@ assert_no_finding "$out" "host.cwd_is_git_repo"
 
 # Case 7: known vault tools are silent (no finding emitted).
 mkdir -p "$TMPDIR_TEST/case7/home" "$TMPDIR_TEST/case7/cwd"
-cat > "$TMPDIR_TEST/case7/home/.zshrc" <<'EOF'
+cat > "$TMPDIR_TEST/case7/home/.zshrc" << 'EOF'
 export OPENAI_API_KEY="$(op read 'op://Personal/OpenAI/key')"
 export ANTHROPIC_API_KEY=$(pass show anthropic/api-key)
 export GH_TOKEN=$(gh auth token)
@@ -96,7 +96,7 @@ assert_no_finding "$out" "host.creds_in_shell_rc"
 
 # Case 8: unknown command substitution → info-level finding.
 mkdir -p "$TMPDIR_TEST/case8/home" "$TMPDIR_TEST/case8/cwd"
-cat > "$TMPDIR_TEST/case8/home/.zshrc" <<'EOF'
+cat > "$TMPDIR_TEST/case8/home/.zshrc" << 'EOF'
 export OPENAI_API_KEY=$(my-custom-fetcher --service=openai)
 EOF
 (cd "$TMPDIR_TEST/case8/cwd" && git init -q)
@@ -109,7 +109,7 @@ echo "$out" | grep -q "command substitution from an unrecognized tool" \
 
 # Case 9: $VAR forwarding → info-level finding.
 mkdir -p "$TMPDIR_TEST/case9/home" "$TMPDIR_TEST/case9/cwd"
-cat > "$TMPDIR_TEST/case9/home/.zshrc" <<'EOF'
+cat > "$TMPDIR_TEST/case9/home/.zshrc" << 'EOF'
 export OPENAI_API_KEY=$STORED_KEY
 EOF
 (cd "$TMPDIR_TEST/case9/cwd" && git init -q)
@@ -120,7 +120,7 @@ echo "$out" | grep -q "Credential forwarded from another variable" \
 
 # Case 10: cwd .envrc (direnv) is scanned — literal cred there is flagged.
 mkdir -p "$TMPDIR_TEST/case10/home" "$TMPDIR_TEST/case10/cwd"
-cat > "$TMPDIR_TEST/case10/cwd/.envrc" <<'EOF'
+cat > "$TMPDIR_TEST/case10/cwd/.envrc" << 'EOF'
 export OPENAI_API_KEY=sk-literal-in-envrc
 EOF
 (cd "$TMPDIR_TEST/case10/cwd" && git init -q)
@@ -131,7 +131,7 @@ echo "$out" | grep -q ".envrc" \
 
 # Case 11: gcloud secrets versions access — silent.
 mkdir -p "$TMPDIR_TEST/case11/home" "$TMPDIR_TEST/case11/cwd"
-cat > "$TMPDIR_TEST/case11/home/.zshrc" <<'EOF'
+cat > "$TMPDIR_TEST/case11/home/.zshrc" << 'EOF'
 export OPENAI_API_KEY=$(gcloud secrets versions access latest --secret openai-key)
 EOF
 (cd "$TMPDIR_TEST/case11/cwd" && git init -q)

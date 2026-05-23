@@ -26,7 +26,7 @@ make_adapter() {
   local name="$1"
   local body="$2"
   mkdir -p "$FAKE_ROOT/agents/$name"
-  cat > "$FAKE_ROOT/agents/$name/audit.sh" <<EOF
+  cat > "$FAKE_ROOT/agents/$name/audit.sh" << EOF
 #!/usr/bin/env bash
 $body
 EOF
@@ -55,7 +55,7 @@ info_pos=$(echo "$out" | grep -n "t.info" | head -1 | cut -d: -f1)
 
 # Case 3: --strict with high finding → exit 2.
 set +e
-"$FAKE_ROOT/scripts/audit-config.sh" --strict >/dev/null 2>&1
+"$FAKE_ROOT/scripts/audit-config.sh" --strict > /dev/null 2>&1
 ec=$?
 set -e
 [[ "$ec" == "2" ]] || fail "case3: --strict with findings should exit 2, got $ec"
@@ -66,13 +66,13 @@ make_adapter test1 'cat <<JSON
 {"id":"t.info","severity":"info","title":"info-only"}
 JSON'
 set +e
-"$FAKE_ROOT/scripts/audit-config.sh" --strict >/dev/null 2>&1
+"$FAKE_ROOT/scripts/audit-config.sh" --strict > /dev/null 2>&1
 ec=$?
 set -e
 [[ "$ec" == "0" ]] || fail "case4: --strict with only info should exit 0, got $ec"
 
 # Case 5: --json output is valid JSON with required schema.
-out=$("$FAKE_ROOT/scripts/audit-config.sh" --json 2>/dev/null)
+out=$("$FAKE_ROOT/scripts/audit-config.sh" --json 2> /dev/null)
 echo "$out" | python3 -c "
 import json, sys
 d = json.load(sys.stdin)
@@ -109,7 +109,7 @@ make_adapter test1 'cat <<JSON
 {"id":"t.bad-sev","severity":"bogus","title":"bogus severity"}
 {"id":"t.ok","severity":"info","title":"ok"}
 JSON'
-stdout=$("$FAKE_ROOT/scripts/audit-config.sh" 2>/dev/null)
+stdout=$("$FAKE_ROOT/scripts/audit-config.sh" 2> /dev/null)
 # Rendered findings appear with two leading spaces. A skipped finding never gets
 # that rendering.
 echo "$stdout" | grep -qE "^  t\.bad-sev$" \
@@ -125,7 +125,7 @@ JSON'
 make_adapter test2 'cat <<JSON
 {"id":"test2.info","severity":"info","title":"info"}
 JSON'
-out=$("$FAKE_ROOT/scripts/audit-config.sh" --summary 2>/dev/null)
+out=$("$FAKE_ROOT/scripts/audit-config.sh" --summary 2> /dev/null)
 [[ "$out" == *"agent_test1=critical"* ]] \
   || fail "case9: expected agent_test1=critical, got: $out"
 [[ "$out" == *"agent_test2=info"* ]] \
@@ -138,13 +138,13 @@ out=$("$FAKE_ROOT/scripts/audit-config.sh" --summary 2>/dev/null)
 # Case 10: adapter with zero findings shows agent_<name>=ok.
 rm -rf "$FAKE_ROOT/agents/test1" "$FAKE_ROOT/agents/test2"
 make_adapter test_silent 'true'
-out=$("$FAKE_ROOT/scripts/audit-config.sh" --summary 2>/dev/null)
+out=$("$FAKE_ROOT/scripts/audit-config.sh" --summary 2> /dev/null)
 [[ "$out" == *"agent_test_silent=ok"* ]] \
   || fail "case10: expected agent_test_silent=ok for silent adapter, got: $out"
 
 # Case 11: --json and --summary are mutually exclusive.
 set +e
-"$FAKE_ROOT/scripts/audit-config.sh" --json --summary >/dev/null 2>&1
+"$FAKE_ROOT/scripts/audit-config.sh" --json --summary > /dev/null 2>&1
 ec=$?
 set -e
 [[ "$ec" != "0" ]] || fail "case11: --json --summary should error, got exit $ec"
@@ -162,10 +162,10 @@ out=$("$FAKE_ROOT/scripts/audit-config.sh" --drift-only 2>&1)
 [[ "$out" == *"No baseline yet"* ]] || fail "case12: expected 'No baseline yet', got: $out"
 
 # Case 13: --snapshot writes current.json + a timestamped historical file.
-"$FAKE_ROOT/scripts/audit-config.sh" --snapshot --no-drift --json >/dev/null
+"$FAKE_ROOT/scripts/audit-config.sh" --snapshot --no-drift --json > /dev/null
 [[ -f "$SANDSHELL_BASELINE_DIR/current.json" ]] \
   || fail "case13: --snapshot should write current.json"
-hist_count=$(ls "$SANDSHELL_BASELINE_DIR"/audit-*.json 2>/dev/null | wc -l)
+hist_count=$(ls "$SANDSHELL_BASELINE_DIR"/audit-*.json 2> /dev/null | wc -l)
 [[ "$hist_count" -ge 1 ]] || fail "case13: --snapshot should write a historical audit-*.json"
 
 # Case 14: re-running audit with no changes → drift footer says "No drift".
@@ -182,8 +182,8 @@ JSON'
 out=$("$FAKE_ROOT/scripts/audit-config.sh" --drift-only 2>&1)
 [[ "$out" == *"+1 new"* && "$out" == *"-1 resolved"* ]] \
   || fail "case15: expected +1 new / -1 resolved, got: $out"
-[[ "$out" == *"d.new"* ]]  || fail "case15: drift should name added id d.new, got: $out"
-[[ "$out" == *"d.med"* ]]  || fail "case15: drift should name resolved id d.med, got: $out"
+[[ "$out" == *"d.new"* ]] || fail "case15: drift should name added id d.new, got: $out"
+[[ "$out" == *"d.med"* ]] || fail "case15: drift should name resolved id d.med, got: $out"
 
 # Case 16: --no-drift suppresses the footer in default human output.
 out=$("$FAKE_ROOT/scripts/audit-config.sh" --no-drift 2>&1)
@@ -191,7 +191,7 @@ out=$("$FAKE_ROOT/scripts/audit-config.sh" --no-drift 2>&1)
   || fail "case16: --no-drift should suppress drift output, got: $out"
 
 # Case 17: --json includes a drift block when baseline exists.
-out=$("$FAKE_ROOT/scripts/audit-config.sh" --json 2>/dev/null)
+out=$("$FAKE_ROOT/scripts/audit-config.sh" --json 2> /dev/null)
 echo "$out" | python3 -c "
 import json, sys
 d = json.load(sys.stdin)
@@ -201,13 +201,13 @@ assert {f['id'] for f in d['drift']['resolved']} == {'d.med'}, d['drift']['resol
 " || fail "case17: --json drift block malformed: $out"
 
 # Case 18: --summary includes drift counts when baseline exists.
-out=$("$FAKE_ROOT/scripts/audit-config.sh" --summary 2>/dev/null)
-[[ "$out" == *"drift_added=1"* ]]    || fail "case18: expected drift_added=1, got: $out"
+out=$("$FAKE_ROOT/scripts/audit-config.sh" --summary 2> /dev/null)
+[[ "$out" == *"drift_added=1"* ]] || fail "case18: expected drift_added=1, got: $out"
 [[ "$out" == *"drift_resolved=1"* ]] || fail "case18: expected drift_resolved=1, got: $out"
 
 # Case 19: --drift-only and --json are mutually exclusive.
 set +e
-"$FAKE_ROOT/scripts/audit-config.sh" --drift-only --json >/dev/null 2>&1
+"$FAKE_ROOT/scripts/audit-config.sh" --drift-only --json > /dev/null 2>&1
 ec=$?
 set -e
 [[ "$ec" != "0" ]] || fail "case19: --drift-only --json should error, got exit $ec"
@@ -216,7 +216,7 @@ set -e
 # We have 1 baseline written by case 13's --snapshot; add a second so the
 # "(oldest <date>)" clause renders. Sleep 1s so the timestamp differs.
 sleep 1
-"$FAKE_ROOT/scripts/audit-config.sh" --snapshot --no-drift --json >/dev/null
+"$FAKE_ROOT/scripts/audit-config.sh" --snapshot --no-drift --json > /dev/null
 out=$(NO_COLOR=1 "$FAKE_ROOT/scripts/audit-config.sh" --drift-only 2>&1)
 [[ "$out" == *"snapshots in"* ]] \
   || fail "case20: drift-only should include snapshot-count line, got: $out"

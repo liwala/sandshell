@@ -12,10 +12,10 @@ TMPDIR_TEST="$(mktemp -d "${TMPDIR:-/tmp}/sandshell-test-codex-hooks.XXXXXX")"
 trap 'rm -rf "$TMPDIR_TEST"' EXIT
 
 # Case 1: fresh install at user scope writes hooks.json + config.toml flag.
-HOME="$TMPDIR_TEST/case1" "$ROOT/scripts/setup-codex-hooks.sh" user >/dev/null
+HOME="$TMPDIR_TEST/case1" "$ROOT/scripts/setup-codex-hooks.sh" user > /dev/null
 hooks="$TMPDIR_TEST/case1/.codex/hooks.json"
 config="$TMPDIR_TEST/case1/.codex/config.toml"
-[[ -f "$hooks" ]]  || fail "case1: hooks.json was not written"
+[[ -f "$hooks" ]] || fail "case1: hooks.json was not written"
 [[ -f "$config" ]] || fail "case1: config.toml was not written"
 assert_json_value "$hooks" "hooks.PreToolUse.0.matcher" "^Bash$"
 assert_json_value "$hooks" "hooks.PreToolUse.0.hooks.0.command" "$ROOT/scripts/hook-pre-bash.sh"
@@ -26,7 +26,7 @@ grep -qE '^[[:space:]]*codex_hooks[[:space:]]*=[[:space:]]*true' "$config" \
 
 # Case 2: re-running is idempotent — file content stays the same.
 before_hash=$(python3 -c "import hashlib,sys;print(hashlib.sha256(open('$hooks','rb').read()).hexdigest())")
-HOME="$TMPDIR_TEST/case1" "$ROOT/scripts/setup-codex-hooks.sh" user >/dev/null
+HOME="$TMPDIR_TEST/case1" "$ROOT/scripts/setup-codex-hooks.sh" user > /dev/null
 after_hash=$(python3 -c "import hashlib,sys;print(hashlib.sha256(open('$hooks','rb').read()).hexdigest())")
 [[ "$before_hash" == "$after_hash" ]] \
   || fail "case2: re-running setup-codex-hooks should be idempotent"
@@ -34,7 +34,7 @@ after_hash=$(python3 -c "import hashlib,sys;print(hashlib.sha256(open('$hooks','
 # Case 3: existing [features] section with another flag — codex_hooks gets
 # inserted into the same section, not duplicated. Other keys preserved.
 mkdir -p "$TMPDIR_TEST/case3/.codex"
-cat > "$TMPDIR_TEST/case3/.codex/config.toml" <<'EOF'
+cat > "$TMPDIR_TEST/case3/.codex/config.toml" << 'EOF'
 sandbox_mode = "workspace-write"
 
 [features]
@@ -43,7 +43,7 @@ some_other_flag = true
 [tui]
 theme = "dark"
 EOF
-HOME="$TMPDIR_TEST/case3" "$ROOT/scripts/setup-codex-hooks.sh" user >/dev/null
+HOME="$TMPDIR_TEST/case3" "$ROOT/scripts/setup-codex-hooks.sh" user > /dev/null
 config3="$TMPDIR_TEST/case3/.codex/config.toml"
 grep -qE '^[[:space:]]*codex_hooks[[:space:]]*=[[:space:]]*true' "$config3" \
   || fail "case3: codex_hooks = true should be added"
@@ -59,7 +59,7 @@ grep -qE '^\[tui\]' "$config3" \
 # config.toml at project scope (feature flag stays at user level only).
 mkdir -p "$TMPDIR_TEST/case4/cwd"
 HOME="$TMPDIR_TEST/case4/home" \
-  bash -c "cd '$TMPDIR_TEST/case4/cwd' && '$ROOT/scripts/setup-codex-hooks.sh' project" >/dev/null
+  bash -c "cd '$TMPDIR_TEST/case4/cwd' && '$ROOT/scripts/setup-codex-hooks.sh' project" > /dev/null
 project_hooks="$TMPDIR_TEST/case4/cwd/.codex/hooks.json"
 [[ -f "$project_hooks" ]] || fail "case4: project-scope hooks.json was not written"
 assert_json_value "$project_hooks" "hooks.PreToolUse.0.matcher" "^Bash$"

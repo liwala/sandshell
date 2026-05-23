@@ -35,22 +35,37 @@ SHOW_ONLY=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    user|project) SCOPE="$1"; shift ;;
+    user | project)
+      SCOPE="$1"
+      shift
+      ;;
     personal)
       SCOPE="user"
       echo "Note: 'personal' is the legacy name for 'user' — both still accepted." >&2
       shift
       ;;
-    --profile=*)      PROFILE="${1#*=}"; shift ;;
-    --strict)         STRICT=true; shift ;;
-    --show)           SHOW_ONLY=true; shift ;;
-    --help|-h|help)   usage ;;
-    *)                echo "Unknown option: $1" >&2; exit 1 ;;
+    --profile=*)
+      PROFILE="${1#*=}"
+      shift
+      ;;
+    --strict)
+      STRICT=true
+      shift
+      ;;
+    --show)
+      SHOW_ONLY=true
+      shift
+      ;;
+    --help | -h | help) usage ;;
+    *)
+      echo "Unknown option: $1" >&2
+      exit 1
+      ;;
   esac
 done
 
 # Check for jq
-if ! command -v jq >/dev/null 2>&1; then
+if ! command -v jq > /dev/null 2>&1; then
   echo "ERROR: jq is required. Install it:" >&2
   echo "  macOS:  brew install jq" >&2
   echo "  Linux:  apt-get install jq" >&2
@@ -59,8 +74,14 @@ fi
 
 # Determine settings file location
 case "$SCOPE" in
-  user)    SETTINGS_DIR="$HOME/.claude"; SETTINGS_FILE="$SETTINGS_DIR/settings.json" ;;
-  project) SETTINGS_DIR=".claude"; SETTINGS_FILE="$SETTINGS_DIR/settings.json" ;;
+  user)
+    SETTINGS_DIR="$HOME/.claude"
+    SETTINGS_FILE="$SETTINGS_DIR/settings.json"
+    ;;
+  project)
+    SETTINGS_DIR=".claude"
+    SETTINGS_FILE="$SETTINGS_DIR/settings.json"
+    ;;
 esac
 
 # Load allowed domains from profile
@@ -68,7 +89,7 @@ domains=()
 profile_file="$PROFILES_DIR/${PROFILE}.conf"
 if [[ ! -f "$profile_file" ]]; then
   echo "ERROR: Unknown profile '$PROFILE'. Available:" >&2
-  find "$PROFILES_DIR" -maxdepth 1 -name '*.conf' -exec basename {} .conf \; 2>/dev/null >&2
+  find "$PROFILES_DIR" -maxdepth 1 -name '*.conf' -exec basename {} .conf \; 2> /dev/null >&2
   exit 1
 fi
 
@@ -149,7 +170,7 @@ sandshell_diff_snapshot "$SETTINGS_FILE"
 
 if [[ -f "$SETTINGS_FILE" ]]; then
   # Check if sandbox is already configured by sandshell
-  if grep -q '"sandshell_managed"' "$SETTINGS_FILE" 2>/dev/null; then
+  if grep -q '"sandshell_managed"' "$SETTINGS_FILE" 2> /dev/null; then
     echo "Updating existing sandshell sandbox config in $SETTINGS_FILE"
   fi
 

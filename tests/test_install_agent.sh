@@ -12,9 +12,9 @@ export HOME="$TMPDIR_TEST/home"
 
 (
   cd "$TMPDIR_TEST/project"
-  "$ROOT/scripts/install-agent.sh" codex project >/dev/null
-  "$ROOT/scripts/install-agent.sh" claude project >/dev/null
-  "$ROOT/scripts/install-agent.sh" generic project >/dev/null
+  "$ROOT/scripts/install-agent.sh" codex project > /dev/null
+  "$ROOT/scripts/install-agent.sh" claude project > /dev/null
+  "$ROOT/scripts/install-agent.sh" generic project > /dev/null
 )
 
 CODEX_SKILL="$TMPDIR_TEST/project/.codex/skills/sandshell/SKILL.md"

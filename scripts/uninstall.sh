@@ -23,19 +23,28 @@ REMOVE_AGENT_INSTALLS=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    user|project) SCOPE="$1"; shift ;;
+    user | project)
+      SCOPE="$1"
+      shift
+      ;;
     personal)
       SCOPE="user"
       echo "Note: 'personal' is the legacy name for 'user' — both still accepted." >&2
       shift
       ;;
-    --remove-agent-installs) REMOVE_AGENT_INSTALLS=true; shift ;;
-    --help|-h|help) usage ;;
-    *) echo "Unknown option: $1" >&2; exit 1 ;;
+    --remove-agent-installs)
+      REMOVE_AGENT_INSTALLS=true
+      shift
+      ;;
+    --help | -h | help) usage ;;
+    *)
+      echo "Unknown option: $1" >&2
+      exit 1
+      ;;
   esac
 done
 
-if ! command -v jq >/dev/null 2>&1; then
+if ! command -v jq > /dev/null 2>&1; then
   echo "ERROR: jq is required for uninstall. Install it:" >&2
   echo "  macOS:  brew install jq" >&2
   echo "  Linux:  apt-get install jq" >&2
@@ -108,7 +117,7 @@ fi
 # Remove sandshell-managed Codex config (the file is fully sandshell-owned
 # when its first comment line marks it; safest to remove the whole file).
 if [[ -n "$CODEX_CONFIG" && -f "$CODEX_CONFIG" ]]; then
-  if grep -q "Managed by sandshell" "$CODEX_CONFIG" 2>/dev/null; then
+  if grep -q "Managed by sandshell" "$CODEX_CONFIG" 2> /dev/null; then
     rm "$CODEX_CONFIG"
     echo "Removed sandshell-managed $CODEX_CONFIG"
   else
@@ -147,7 +156,7 @@ fi
 # unrelated keys the user added (preserves the symmetry with Claude's removal
 # pattern, which only deletes sandbox/permissions/hooks added by sandshell).
 if [[ -n "$GEMINI_CONFIG" && -f "$GEMINI_CONFIG" ]]; then
-  if jq -e '.sandshell_managed == true' "$GEMINI_CONFIG" >/dev/null 2>&1; then
+  if jq -e '.sandshell_managed == true' "$GEMINI_CONFIG" > /dev/null 2>&1; then
     updated=$(jq '
       del(.sandshell_managed) |
       .tools = (.tools // {} | del(.sandbox, .sandboxNetworkAccess)) |

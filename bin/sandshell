@@ -17,7 +17,7 @@ else
 fi
 
 usage() {
-  cat <<EOF
+  cat << EOF
 Usage: sandshell <verb> [args]
 
 Verbs:
@@ -75,10 +75,10 @@ verb="$1"
 shift
 
 case "$verb" in
-  -h|--help|help)
+  -h | --help | help)
     usage
     ;;
-  --version|version)
+  --version | version)
     echo "sandshell $VERSION"
     ;;
   detect)
@@ -114,14 +114,14 @@ case "$verb" in
         shift
         exec "$SCRIPTS_DIR/setup-gemini.sh" "$@"
         ;;
-      ""|all)
+      "" | all)
         # Apply to every detected agent. Args (if any) fan out to all setup
         # scripts; an agent that doesn't recognize a flag surfaces its own
         # error and is recorded in failed_agents.
         if [[ "$target" == "all" ]]; then shift; fi
         applied_any=false
         failed_agents=()
-        if command -v claude >/dev/null 2>&1 || [[ -d "$HOME/.claude" ]]; then
+        if command -v claude > /dev/null 2>&1 || [[ -d "$HOME/.claude" ]]; then
           echo "=== Applying to Claude Code ==="
           if ! "$SCRIPTS_DIR/setup.sh" "$@"; then
             failed_agents+=("claude")
@@ -129,7 +129,7 @@ case "$verb" in
           applied_any=true
           echo
         fi
-        if command -v codex >/dev/null 2>&1 || [[ -d "$HOME/.codex" ]]; then
+        if command -v codex > /dev/null 2>&1 || [[ -d "$HOME/.codex" ]]; then
           echo "=== Applying to Codex ==="
           if ! "$SCRIPTS_DIR/setup-codex.sh" "$@"; then
             failed_agents+=("codex")
@@ -137,7 +137,7 @@ case "$verb" in
           applied_any=true
           echo
         fi
-        if command -v gemini >/dev/null 2>&1 || [[ -d "$HOME/.gemini" ]]; then
+        if command -v gemini > /dev/null 2>&1 || [[ -d "$HOME/.gemini" ]]; then
           echo "=== Applying to Gemini ==="
           if ! "$SCRIPTS_DIR/setup-gemini.sh" "$@"; then
             failed_agents+=("gemini")
@@ -154,7 +154,7 @@ case "$verb" in
           exit 1
         fi
         ;;
-      user|project|personal|workspace|--*)
+      user | project | personal | workspace | --*)
         # Bare-scope or bare-flag form: routes to Claude (legacy compat
         # since v0.1 used setup.sh as the only target). Many flags
         # (--strict, --profile=…) are Claude-specific and have no Codex /

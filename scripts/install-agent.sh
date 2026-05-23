@@ -40,7 +40,7 @@ render_template() {
 write_skill_header() {
   local target_file="$1"
   local description="$2"
-  cat > "$target_file" <<HEADER
+  cat > "$target_file" << HEADER
 ---
 name: sandshell
 description: >
@@ -86,8 +86,8 @@ install_claude() {
   local target_dir
 
   case "$scope" in
-    user)     target_dir="$HOME/.claude/skills/sandshell" ;;
-    project)  target_dir=".claude/skills/sandshell" ;;
+    user) target_dir="$HOME/.claude/skills/sandshell" ;;
+    project) target_dir=".claude/skills/sandshell" ;;
   esac
 
   # Claude Code uses its own SKILL.md with special features
@@ -121,8 +121,8 @@ install_codex() {
   local target_dir
 
   case "$scope" in
-    user)     target_dir="$HOME/.codex/skills/sandshell" ;;
-    project)  target_dir=".codex/skills/sandshell" ;;
+    user) target_dir="$HOME/.codex/skills/sandshell" ;;
+    project) target_dir=".codex/skills/sandshell" ;;
   esac
 
   mkdir -p "$target_dir"
@@ -138,10 +138,10 @@ install_codex() {
     "$CODEX_TEMPLATE"
 
   # Symlink scripts
-  ln -sf "$SANDSHELL_DIR/scripts" "$target_dir/scripts" 2>/dev/null || \
-    cp -r "$SANDSHELL_DIR/scripts" "$target_dir/scripts"
-  ln -sf "$SANDSHELL_DIR/profiles" "$target_dir/profiles" 2>/dev/null || \
-    cp -r "$SANDSHELL_DIR/profiles" "$target_dir/profiles"
+  ln -sf "$SANDSHELL_DIR/scripts" "$target_dir/scripts" 2> /dev/null \
+    || cp -r "$SANDSHELL_DIR/scripts" "$target_dir/scripts"
+  ln -sf "$SANDSHELL_DIR/profiles" "$target_dir/profiles" 2> /dev/null \
+    || cp -r "$SANDSHELL_DIR/profiles" "$target_dir/profiles"
 
   echo "Codex CLI: installed to $target_dir"
   echo "  Next: sandshell apply codex"
@@ -153,8 +153,8 @@ install_generic() {
   local sandshell_path="$SANDSHELL_DIR"
 
   case "$scope" in
-    user)     target_file="$HOME/.sandshell/SANDSHELL.md" ;;
-    project)  target_file="SANDSHELL.md" ;;
+    user) target_file="$HOME/.sandshell/SANDSHELL.md" ;;
+    project) target_file="SANDSHELL.md" ;;
   esac
 
   [[ "$scope" = "project" ]] && sandshell_path="."
@@ -174,14 +174,14 @@ install_gemini() {
   local target_file
 
   case "$scope" in
-    user)     target_file="$HOME/.gemini/GEMINI.md" ;;
-    project)  target_file="GEMINI.md" ;;
+    user) target_file="$HOME/.gemini/GEMINI.md" ;;
+    project) target_file="GEMINI.md" ;;
   esac
 
   local sandshell_path="$SANDSHELL_DIR"
 
   # Check if sandshell section already exists
-  if [[ -f "$target_file" ]] && grep -q "sandshell" "$target_file" 2>/dev/null; then
+  if [[ -f "$target_file" ]] && grep -q "sandshell" "$target_file" 2> /dev/null; then
     echo "Gemini CLI: sandshell already in $target_file"
     return 0
   fi
@@ -205,7 +205,7 @@ install_amp() {
   local sandshell_path="$SANDSHELL_DIR"
 
   # Check if sandshell section already exists
-  if [[ -f "$target_file" ]] && grep -q "sandshell" "$target_file" 2>/dev/null; then
+  if [[ -f "$target_file" ]] && grep -q "sandshell" "$target_file" 2> /dev/null; then
     echo "Amp: sandshell already in $target_file"
     return 0
   fi
@@ -243,13 +243,13 @@ if [[ "$SCOPE" = "personal" ]]; then
 fi
 
 case "$AGENT" in
-  claude)  install_claude "$SCOPE" ;;
-  codex)   install_codex "$SCOPE" ;;
+  claude) install_claude "$SCOPE" ;;
+  codex) install_codex "$SCOPE" ;;
   generic) install_generic "$SCOPE" ;;
-  gemini)  install_gemini "$SCOPE" ;;
-  amp)     install_amp "$SCOPE" ;;
-  all)     install_all "$SCOPE" ;;
-  --help|-h|help) usage ;;
+  gemini) install_gemini "$SCOPE" ;;
+  amp) install_amp "$SCOPE" ;;
+  all) install_all "$SCOPE" ;;
+  --help | -h | help) usage ;;
   *)
     echo "Unknown agent: $AGENT" >&2
     echo "Supported: claude, codex, generic, gemini, amp, all" >&2

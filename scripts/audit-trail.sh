@@ -20,7 +20,7 @@ cmd_init() {
 
   # Prune old sessions
   local count
-  count=$(ls -1 "$AUDIT_DIR"/*.jsonl 2>/dev/null | wc -l | tr -d ' ')
+  count=$(ls -1 "$AUDIT_DIR"/*.jsonl 2> /dev/null | wc -l | tr -d ' ')
   if [[ "$count" -gt "$MAX_SESSIONS" ]]; then
     ls -1t "$AUDIT_DIR"/*.jsonl | tail -n +"$((MAX_SESSIONS + 1))" | xargs rm -f
   fi
@@ -52,10 +52,10 @@ cmd_show() {
 
   while IFS= read -r line; do
     local ts op cmd exit_code
-    ts=$(echo "$line" | python3 -c "import sys,json; print(json.loads(sys.stdin.read()).get('ts',''))" 2>/dev/null || echo "?")
-    op=$(echo "$line" | python3 -c "import sys,json; print(json.loads(sys.stdin.read()).get('op',''))" 2>/dev/null || echo "?")
-    cmd=$(echo "$line" | python3 -c "import sys,json; print(json.loads(sys.stdin.read()).get('cmd',''))" 2>/dev/null || echo "")
-    exit_code=$(echo "$line" | python3 -c "import sys,json; d=json.loads(sys.stdin.read()); print(d.get('exit_code',''))" 2>/dev/null || echo "")
+    ts=$(echo "$line" | python3 -c "import sys,json; print(json.loads(sys.stdin.read()).get('ts',''))" 2> /dev/null || echo "?")
+    op=$(echo "$line" | python3 -c "import sys,json; print(json.loads(sys.stdin.read()).get('op',''))" 2> /dev/null || echo "?")
+    cmd=$(echo "$line" | python3 -c "import sys,json; print(json.loads(sys.stdin.read()).get('cmd',''))" 2> /dev/null || echo "")
+    exit_code=$(echo "$line" | python3 -c "import sys,json; d=json.loads(sys.stdin.read()); print(d.get('exit_code',''))" 2> /dev/null || echo "")
 
     local status_icon="  "
     if [[ "$exit_code" = "0" ]]; then
@@ -139,7 +139,7 @@ cmd_list() {
     return 0
   fi
 
-  python3 - "$AUDIT_DIR" <<'PY'
+  python3 - "$AUDIT_DIR" << 'PY'
 import json, os, sys, glob
 from datetime import datetime
 
@@ -191,7 +191,7 @@ PY
 }
 
 usage() {
-  cat <<EOF
+  cat << EOF
 Usage: audit-trail.sh <command> [args]
 
 Commands:
@@ -211,12 +211,27 @@ EOF
 # ─── Dispatch ────────────────────────────────────────────────────────
 
 case "${1:-help}" in
-  list|ls) shift; cmd_list ;;
-  init)    shift; cmd_init "$@" ;;
-  log)     shift; cmd_log "$@" ;;
-  show)    shift; cmd_show "$@" ;;
-  summary) shift; cmd_summary "$@" ;;
-  -h|--help|help) usage ;;
+  list | ls)
+    shift
+    cmd_list
+    ;;
+  init)
+    shift
+    cmd_init "$@"
+    ;;
+  log)
+    shift
+    cmd_log "$@"
+    ;;
+  show)
+    shift
+    cmd_show "$@"
+    ;;
+  summary)
+    shift
+    cmd_summary "$@"
+    ;;
+  -h | --help | help) usage ;;
   *)
     echo "Unknown command: $1" >&2
     usage >&2

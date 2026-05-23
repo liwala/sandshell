@@ -21,7 +21,7 @@ FORCE=false
 SHOW_ONLY=false
 
 usage() {
-  cat <<EOF
+  cat << EOF
 Usage: setup-codex.sh [--force] [--show]
 
 Applies sandshell's safety defaults to ~/.codex/config.toml:
@@ -54,11 +54,27 @@ SKIP_HOOKS=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --force)       FORCE=true; shift ;;
-    --show)        SHOW_ONLY=true; shift ;;
-    --skip-hooks)  SKIP_HOOKS=true; shift ;;
-    -h|--help|help) usage; exit 0 ;;
-    *) echo "Unknown option: $1" >&2; usage >&2; exit 1 ;;
+    --force)
+      FORCE=true
+      shift
+      ;;
+    --show)
+      SHOW_ONLY=true
+      shift
+      ;;
+    --skip-hooks)
+      SKIP_HOOKS=true
+      shift
+      ;;
+    -h | --help | help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $1" >&2
+      usage >&2
+      exit 1
+      ;;
   esac
 done
 
@@ -101,7 +117,7 @@ PRE_EXISTED=false
 PRE_MANAGED=false
 if [[ -f "$CONFIG_FILE" ]]; then
   PRE_EXISTED=true
-  grep -q "Managed by sandshell" "$CONFIG_FILE" 2>/dev/null && PRE_MANAGED=true
+  grep -q "Managed by sandshell" "$CONFIG_FILE" 2> /dev/null && PRE_MANAGED=true
 fi
 
 sandshell_diff_snapshot "$CONFIG_FILE"
@@ -117,7 +133,7 @@ case "$ACTION" in
     # [projects.*], [profiles.*], [tui.*], [mcp_servers.*], and any custom
     # top-level keys. Comments cannot round-trip (Python's stdlib has tomllib
     # for reading but no writer; we serialize the parsed dict back manually).
-    python3 - "$CONFIG_FILE" <<'PY'
+    python3 - "$CONFIG_FILE" << 'PY'
 import os, sys, json, re
 import tomllib
 
@@ -242,7 +258,7 @@ echo ""
 sandshell_diff_show "$CONFIG_FILE"
 echo ""
 
-cat <<EOF
+cat << EOF
 
 What this enforces:
   - Filesystem writes: restricted to current working directory
@@ -273,7 +289,7 @@ fi
 
 # Refresh the drift baseline so the next 'sandshell audit' compares against
 # this post-apply state.
-"$SCRIPT_DIR/audit-config.sh" --snapshot --no-drift --json >/dev/null 2>&1 || true
+"$SCRIPT_DIR/audit-config.sh" --snapshot --no-drift --json > /dev/null 2>&1 || true
 # shellcheck source=lib/baseline.sh
 . "$SCRIPT_DIR/lib/baseline.sh"
 echo "Baseline saved. $(sandshell_baseline_summary)."

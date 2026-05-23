@@ -36,7 +36,7 @@ sandshell_diff_show() {
     # `diff` exits 1 when files differ (intentional). Swallow that with `|| :`
     # so callers running `set -euo pipefail` don't abort here.
     diff -u --label "before" --label "after" \
-      "$SANDSHELL_DIFF_SNAPSHOT" "$file" 2>/dev/null | sed 's/^/  /' || :
+      "$SANDSHELL_DIFF_SNAPSHOT" "$file" 2> /dev/null | sed 's/^/  /' || :
   fi
   rm -f "$SANDSHELL_DIFF_SNAPSHOT"
   SANDSHELL_DIFF_SNAPSHOT=""

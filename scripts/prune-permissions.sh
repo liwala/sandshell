@@ -14,7 +14,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPT_DIR/lib/diff-apply.sh"
 
 usage() {
-  cat <<EOF
+  cat << EOF
 Usage: sandshell prune-permissions [options]
 
 Interactively prune entries from .permissions.allow across all Claude Code
@@ -44,7 +44,7 @@ Examples:
 EOF
 }
 
-if ! command -v jq >/dev/null 2>&1; then
+if ! command -v jq > /dev/null 2>&1; then
   echo "ERROR: jq is required for prune-permissions." >&2
   exit 1
 fi
@@ -57,13 +57,35 @@ ASSUME_YES=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --scope=*)          SCOPE_FILTER="${1#--scope=}"; shift ;;
-    --remove=*)         REMOVE_INDICES="${1#--remove=}"; shift ;;
-    --remove-matching=*) REMOVE_MATCHING="${1#--remove-matching=}"; shift ;;
-    --dry-run)          DRY_RUN=true; shift ;;
-    -y|--yes)           ASSUME_YES=true; shift ;;
-    -h|--help|help)     usage; exit 0 ;;
-    *) echo "Unknown option: $1" >&2; usage >&2; exit 1 ;;
+    --scope=*)
+      SCOPE_FILTER="${1#--scope=}"
+      shift
+      ;;
+    --remove=*)
+      REMOVE_INDICES="${1#--remove=}"
+      shift
+      ;;
+    --remove-matching=*)
+      REMOVE_MATCHING="${1#--remove-matching=}"
+      shift
+      ;;
+    --dry-run)
+      DRY_RUN=true
+      shift
+      ;;
+    -y | --yes)
+      ASSUME_YES=true
+      shift
+      ;;
+    -h | --help | help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $1" >&2
+      usage >&2
+      exit 1
+      ;;
   esac
 done
 
@@ -88,7 +110,7 @@ for pair in "${SCOPE_PAIRS[@]}"; do
   path="${pair#*:}"
   if [[ -n "$SCOPE_FILTER" && "$scope" != "$SCOPE_FILTER" ]]; then continue; fi
   [[ -f "$path" ]] || continue
-  if ! jq -e . "$path" >/dev/null 2>&1; then
+  if ! jq -e . "$path" > /dev/null 2>&1; then
     echo "WARNING: $path is not valid JSON; skipping" >&2
     continue
   fi
@@ -97,7 +119,7 @@ for pair in "${SCOPE_PAIRS[@]}"; do
     ENTRY_SCOPES+=("$scope")
     ENTRY_PATHS+=("$path")
     ENTRY_VALUES+=("$entry")
-  done < <(jq -r '(.permissions.allow // [])[]' "$path" 2>/dev/null)
+  done < <(jq -r '(.permissions.allow // [])[]' "$path" 2> /dev/null)
 done
 
 TOTAL=${#ENTRY_VALUES[@]}
@@ -115,8 +137,8 @@ list_entries() {
   echo "Approved permissions ($TOTAL total):"
   echo ""
   local i width=${#TOTAL}
-  for ((i=0; i<TOTAL; i++)); do
-    printf "  %${width}d.  %-15s  %s\n" "$((i+1))" "${ENTRY_SCOPES[i]}" "${ENTRY_VALUES[i]}"
+  for ((i = 0; i < TOTAL; i++)); do
+    printf "  %${width}d.  %-15s  %s\n" "$((i + 1))" "${ENTRY_SCOPES[i]}" "${ENTRY_VALUES[i]}"
   done
   echo ""
 }
@@ -138,12 +160,14 @@ parse_indices() {
       lo="${part%-*}"
       hi="${part#*-}"
       if [[ ! "$lo" =~ ^[0-9]+$ || ! "$hi" =~ ^[0-9]+$ ]]; then
-        echo "Invalid range: $part" >&2; return 1
+        echo "Invalid range: $part" >&2
+        return 1
       fi
-      for ((i=lo; i<=hi; i++)); do echo "$i"; done
+      for ((i = lo; i <= hi; i++)); do echo "$i"; done
     else
       if [[ ! "$part" =~ ^[0-9]+$ ]]; then
-        echo "Invalid index: $part" >&2; return 1
+        echo "Invalid index: $part" >&2
+        return 1
       fi
       echo "$part"
     fi
@@ -157,9 +181,9 @@ TARGETS=()
 if [[ -n "$REMOVE_INDICES" ]]; then
   while IFS= read -r idx; do TARGETS+=("$idx"); done < <(parse_indices "$REMOVE_INDICES")
 elif [[ -n "$REMOVE_MATCHING" ]]; then
-  for ((i=0; i<TOTAL; i++)); do
+  for ((i = 0; i < TOTAL; i++)); do
     if [[ "${ENTRY_VALUES[i]}" == *"$REMOVE_MATCHING"* ]]; then
-      TARGETS+=("$((i+1))")
+      TARGETS+=("$((i + 1))")
     fi
   done
   if [[ "${#TARGETS[@]}" -eq 0 ]]; then
@@ -201,12 +225,15 @@ fi
 BUCKET_PATHS=()
 BUCKET_BLOBS=()
 for idx in "${TARGETS[@]}"; do
-  i=$((idx-1))
+  i=$((idx - 1))
   path="${ENTRY_PATHS[i]}"
   val="${ENTRY_VALUES[i]}"
   found=-1
-  for ((j=0; j<${#BUCKET_PATHS[@]}; j++)); do
-    if [[ "${BUCKET_PATHS[j]}" == "$path" ]]; then found=$j; break; fi
+  for ((j = 0; j < ${#BUCKET_PATHS[@]}; j++)); do
+    if [[ "${BUCKET_PATHS[j]}" == "$path" ]]; then
+      found=$j
+      break
+    fi
   done
   if [[ "$found" -lt 0 ]]; then
     BUCKET_PATHS+=("$path")
@@ -217,7 +244,7 @@ for idx in "${TARGETS[@]}"; do
 done
 
 echo "Plan:"
-for ((k=0; k<${#BUCKET_PATHS[@]}; k++)); do
+for ((k = 0; k < ${#BUCKET_PATHS[@]}; k++)); do
   echo "  ${BUCKET_PATHS[k]}:"
   while IFS= read -r v; do
     [[ -z "$v" ]] && continue
@@ -235,14 +262,17 @@ if [[ "$ASSUME_YES" != true ]]; then
   printf 'Apply? [y/N]: '
   read -r confirm
   case "$confirm" in
-    y|Y|yes|YES) ;;
-    *) echo "Cancelled."; exit 0 ;;
+    y | Y | yes | YES) ;;
+    *)
+      echo "Cancelled."
+      exit 0
+      ;;
   esac
 fi
 
 # Apply per-file: jq filter that drops the specific values, then write
 # atomically. Snapshot first so we can print a diff.
-for ((k=0; k<${#BUCKET_PATHS[@]}; k++)); do
+for ((k = 0; k < ${#BUCKET_PATHS[@]}; k++)); do
   path="${BUCKET_PATHS[k]}"
   # Build a JSON array of values to drop for this file.
   to_drop_json=$(printf '%s' "${BUCKET_BLOBS[k]}" \

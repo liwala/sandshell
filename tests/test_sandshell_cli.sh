@@ -22,7 +22,7 @@ CALL_LOG="$TMPDIR_TEST/call_log"
 
 make_stub() {
   local name="$1"
-  cat > "$FAKE_ROOT/scripts/$name" <<EOF
+  cat > "$FAKE_ROOT/scripts/$name" << EOF
 #!/usr/bin/env bash
 printf '%s' "$name" >> "$CALL_LOG"
 for arg in "\$@"; do printf ' %s' "\$arg" >> "$CALL_LOG"; done
@@ -52,14 +52,14 @@ out=$("$FAKE_ROOT/bin/sandshell" --version)
 
 # Case 2: unknown verb exits non-zero.
 set +e
-"$FAKE_ROOT/bin/sandshell" notaverb >/dev/null 2>&1
+"$FAKE_ROOT/bin/sandshell" notaverb > /dev/null 2>&1
 ec=$?
 set -e
 [[ "$ec" -ne 0 ]] || fail "case2: unknown verb should exit non-zero"
 
 # Case 3: bare 'apply' (= all detected) forwards no args to each setup script.
 : > "$CALL_LOG"
-HOME="$FAKE_HOME" "$FAKE_ROOT/bin/sandshell" apply >/dev/null 2>&1
+HOME="$FAKE_HOME" "$FAKE_ROOT/bin/sandshell" apply > /dev/null 2>&1
 grep -Fq "setup.sh " "$CALL_LOG" || grep -Fq "setup.sh" "$CALL_LOG" \
   || fail "case3: setup.sh was not invoked: $(cat "$CALL_LOG")"
 grep -Fq "setup-codex.sh" "$CALL_LOG" \
@@ -70,7 +70,7 @@ grep -Fq "setup-gemini.sh" "$CALL_LOG" \
 # Case 4: 'apply all --skip-hooks' forwards --skip-hooks to every detected
 # agent's setup script. Previously only Claude got "$@" (issue #1).
 : > "$CALL_LOG"
-HOME="$FAKE_HOME" "$FAKE_ROOT/bin/sandshell" apply all --skip-hooks >/dev/null 2>&1
+HOME="$FAKE_HOME" "$FAKE_ROOT/bin/sandshell" apply all --skip-hooks > /dev/null 2>&1
 grep -q "^setup.sh .*--skip-hooks" "$CALL_LOG" \
   || fail "case4: --skip-hooks not forwarded to setup.sh: $(cat "$CALL_LOG")"
 grep -q "^setup-codex.sh .*--skip-hooks" "$CALL_LOG" \
@@ -79,13 +79,13 @@ grep -q "^setup-gemini.sh .*--skip-hooks" "$CALL_LOG" \
   || fail "case4: --skip-hooks not forwarded to setup-gemini.sh: $(cat "$CALL_LOG")"
 
 # Case 5: 'apply' surfaces non-zero when any agent's setup fails (issue #5).
-cat > "$FAKE_ROOT/scripts/setup-codex.sh" <<'EOF'
+cat > "$FAKE_ROOT/scripts/setup-codex.sh" << 'EOF'
 #!/usr/bin/env bash
 exit 1
 EOF
 chmod +x "$FAKE_ROOT/scripts/setup-codex.sh"
 set +e
-HOME="$FAKE_HOME" "$FAKE_ROOT/bin/sandshell" apply >/dev/null 2>&1
+HOME="$FAKE_HOME" "$FAKE_ROOT/bin/sandshell" apply > /dev/null 2>&1
 ec=$?
 set -e
 [[ "$ec" -ne 0 ]] || fail "case5: apply should surface non-zero when an agent fails (got $ec)"
@@ -95,7 +95,7 @@ make_stub setup-codex.sh
 # Case 6: 'apply --strict' (bare flag) routes to Claude with a notice (legacy
 # compat — many flags are Claude-specific). Codex/Gemini setup must NOT run.
 : > "$CALL_LOG"
-HOME="$FAKE_HOME" "$FAKE_ROOT/bin/sandshell" apply --strict >/dev/null 2>&1
+HOME="$FAKE_HOME" "$FAKE_ROOT/bin/sandshell" apply --strict > /dev/null 2>&1
 grep -q "^setup.sh .*--strict" "$CALL_LOG" \
   || fail "case6: bare-flag apply should route to setup.sh: $(cat "$CALL_LOG")"
 grep -q "^setup-codex.sh" "$CALL_LOG" \
@@ -107,7 +107,7 @@ grep -q "^setup-gemini.sh" "$CALL_LOG" \
 EMPTY_HOME="$TMPDIR_TEST/empty"
 mkdir -p "$EMPTY_HOME"
 set +e
-err=$(PATH="/usr/bin:/bin" HOME="$EMPTY_HOME" "$FAKE_ROOT/bin/sandshell" apply 2>&1 >/dev/null)
+err=$(PATH="/usr/bin:/bin" HOME="$EMPTY_HOME" "$FAKE_ROOT/bin/sandshell" apply 2>&1 > /dev/null)
 ec=$?
 set -e
 [[ "$ec" -ne 0 ]] || fail "case7: apply with no agents should exit non-zero, got $ec"
@@ -116,7 +116,7 @@ set -e
 
 # Case 8: 'apply codex' forwards remaining args to setup-codex.sh.
 : > "$CALL_LOG"
-HOME="$FAKE_HOME" "$FAKE_ROOT/bin/sandshell" apply codex --force >/dev/null 2>&1
+HOME="$FAKE_HOME" "$FAKE_ROOT/bin/sandshell" apply codex --force > /dev/null 2>&1
 grep -q "^setup-codex.sh .*--force" "$CALL_LOG" \
   || fail "case8: 'apply codex --force' should forward --force: $(cat "$CALL_LOG")"
 

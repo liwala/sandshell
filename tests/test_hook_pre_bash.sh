@@ -10,7 +10,7 @@ trap 'rm -rf "$TMPDIR_TEST"' EXIT
 mkdir -p "$TMPDIR_TEST/bin"
 export PATH="$TMPDIR_TEST/bin:$PATH"
 
-cat > "$TMPDIR_TEST/bin/jq" <<'EOF'
+cat > "$TMPDIR_TEST/bin/jq" << 'EOF'
 #!/usr/bin/env python3
 import json
 import sys
@@ -39,7 +39,7 @@ chmod +x "$TMPDIR_TEST/bin/jq"
 allowed_payload='{"tool_input":{"command":"npm test"}}'
 blocked_payload='{"tool_input":{"command":"claude --dangerouslyDisableSandbox"}}'
 
-printf '%s' "$allowed_payload" | "$ROOT/scripts/hook-pre-bash.sh" >/dev/null
+printf '%s' "$allowed_payload" | "$ROOT/scripts/hook-pre-bash.sh" > /dev/null
 
 set +e
 blocked_output=$(printf '%s' "$blocked_payload" | "$ROOT/scripts/hook-pre-bash.sh" 2>&1)
@@ -53,7 +53,7 @@ set -e
 # NOT be blocked. The previous substring match would fire here (regression).
 commit_msg_payload='{"tool_input":{"command":"git commit -m \"warn about dangerouslyDisableSandbox abuse\""}}'
 set +e
-printf '%s' "$commit_msg_payload" | "$ROOT/scripts/hook-pre-bash.sh" >/dev/null 2>&1
+printf '%s' "$commit_msg_payload" | "$ROOT/scripts/hook-pre-bash.sh" > /dev/null 2>&1
 commit_msg_status=$?
 set -e
 [[ "$commit_msg_status" -eq 0 ]] \
@@ -62,7 +62,7 @@ set -e
 # A flag with =true value should still be blocked.
 flag_value_payload='{"tool_input":{"command":"claude --dangerouslyDisableSandbox=true"}}'
 set +e
-printf '%s' "$flag_value_payload" | "$ROOT/scripts/hook-pre-bash.sh" >/dev/null 2>&1
+printf '%s' "$flag_value_payload" | "$ROOT/scripts/hook-pre-bash.sh" > /dev/null 2>&1
 flag_value_status=$?
 set -e
 [[ "$flag_value_status" -eq 2 ]] \
@@ -71,7 +71,7 @@ set -e
 # A JSON settings-key write should be blocked.
 settings_payload='{"tool_input":{"command":"echo '\''{\"dangerouslyDisableSandbox\": true}'\'' > settings.json"}}'
 set +e
-printf '%s' "$settings_payload" | "$ROOT/scripts/hook-pre-bash.sh" >/dev/null 2>&1
+printf '%s' "$settings_payload" | "$ROOT/scripts/hook-pre-bash.sh" > /dev/null 2>&1
 settings_status=$?
 set -e
 [[ "$settings_status" -eq 2 ]] \

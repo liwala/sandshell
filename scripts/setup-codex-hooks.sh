@@ -36,8 +36,8 @@ case "$SCOPE" in
     HOOKS_FILE="$HOOKS_DIR/hooks.json"
     echo "Installing sandshell hooks for Codex (project scope: this project only)"
     ;;
-  --help|-h|help)
-    cat <<EOF
+  --help | -h | help)
+    cat << EOF
 Usage: setup-codex-hooks.sh [user|project]
 
   user      Install to ~/.codex/hooks.json (default)
@@ -59,7 +59,7 @@ EOF
     ;;
 esac
 
-if ! command -v jq >/dev/null 2>&1; then
+if ! command -v jq > /dev/null 2>&1; then
   echo "ERROR: jq is required for hooks." >&2
   exit 1
 fi
@@ -67,7 +67,8 @@ fi
 mkdir -p "$HOOKS_DIR"
 
 # Hook entries. Codex matchers are regex (per docs); ^Bash$ is exact.
-PRE_HOOK_CONFIG=$(cat <<EOF
+PRE_HOOK_CONFIG=$(
+  cat << EOF
 {
   "matcher": "^Bash$",
   "hooks": [{"type": "command", "command": "$GUARD_SCRIPT", "timeout": 5000}]
@@ -75,7 +76,8 @@ PRE_HOOK_CONFIG=$(cat <<EOF
 EOF
 )
 
-POST_HOOK_CONFIG=$(cat <<EOF
+POST_HOOK_CONFIG=$(
+  cat << EOF
 {
   "matcher": "^Bash$",
   "hooks": [{"type": "command", "command": "$HOOK_SCRIPT", "timeout": 5000}]
@@ -86,8 +88,8 @@ EOF
 sandshell_diff_snapshot "$HOOKS_FILE"
 
 if [[ -f "$HOOKS_FILE" ]]; then
-  if grep -q "hook-post-bash.sh" "$HOOKS_FILE" 2>/dev/null && \
-     grep -q "hook-pre-bash.sh" "$HOOKS_FILE" 2>/dev/null; then
+  if grep -q "hook-post-bash.sh" "$HOOKS_FILE" 2> /dev/null \
+    && grep -q "hook-pre-bash.sh" "$HOOKS_FILE" 2> /dev/null; then
     echo "sandshell hooks already configured in $HOOKS_FILE"
   else
     existing=$(cat "$HOOKS_FILE")
@@ -117,7 +119,7 @@ if [[ -f "$USER_CONFIG" ]] && grep -qE '^[[:space:]]*codex_hooks[[:space:]]*=[[:
   : # Already enabled
 elif [[ -f "$USER_CONFIG" ]] && grep -qE '^\[features\]' "$USER_CONFIG"; then
   # [features] section exists but codex_hooks isn't there — append under it.
-  python3 - "$USER_CONFIG" <<'PY'
+  python3 - "$USER_CONFIG" << 'PY'
 import sys, re
 path = sys.argv[1]
 with open(path) as f:

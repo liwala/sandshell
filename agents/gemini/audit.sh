@@ -23,7 +23,7 @@ emit_finding() {
 }
 
 is_gemini_present() {
-  command -v gemini >/dev/null 2>&1 \
+  command -v gemini > /dev/null 2>&1 \
     || [[ -d "$HOME/.gemini" ]] \
     || [[ -d ".gemini" ]]
 }
@@ -43,7 +43,7 @@ existing_scopes() {
     local scope="${pair%%:*}"
     local path="${pair#*:}"
     [[ -f "$path" ]] || continue
-    if ! jq -e . "$path" >/dev/null 2>&1; then
+    if ! jq -e . "$path" > /dev/null 2>&1; then
       echo "WARNING: $path is not valid JSON; skipping" >&2
       continue
     fi
@@ -56,7 +56,7 @@ any_scope_matches() {
   local filter="$1"
   local scope path
   while read -r scope path; do
-    if jq -e "$filter" "$path" >/dev/null 2>&1; then
+    if jq -e "$filter" "$path" > /dev/null 2>&1; then
       return 0
     fi
   done < <(existing_scopes)
@@ -90,7 +90,7 @@ check_sandbox_enabled() {
 check_sandbox_network_off() {
   local scope path
   while read -r scope path; do
-    if jq -e '.tools.sandboxNetworkAccess == true' "$path" >/dev/null 2>&1; then
+    if jq -e '.tools.sandboxNetworkAccess == true' "$path" > /dev/null 2>&1; then
       emit_finding \
         "gemini.sandbox_network_off" \
         "medium" \
@@ -106,9 +106,9 @@ check_sandbox_network_off() {
 check_sandbox_paths_bounded() {
   local scope path broad
   while read -r scope path; do
-    jq -e '.tools.sandboxAllowedPaths' "$path" >/dev/null 2>&1 || continue
-    broad=$(jq -r '.tools.sandboxAllowedPaths[]?' "$path" 2>/dev/null \
-            | grep -E '^(/|~|\$HOME|/Users|/home)/?$' | head -1 || true)
+    jq -e '.tools.sandboxAllowedPaths' "$path" > /dev/null 2>&1 || continue
+    broad=$(jq -r '.tools.sandboxAllowedPaths[]?' "$path" 2> /dev/null \
+      | grep -E '^(/|~|\$HOME|/Users|/home)/?$' | head -1 || true)
     if [[ -n "$broad" ]]; then
       emit_finding \
         "gemini.sandbox_paths_bounded" \
@@ -170,7 +170,7 @@ check_disable_always_allow() {
 check_approval_mode() {
   local scope path
   while read -r scope path; do
-    if jq -e '.general.defaultApprovalMode == "auto_edit"' "$path" >/dev/null 2>&1; then
+    if jq -e '.general.defaultApprovalMode == "auto_edit"' "$path" > /dev/null 2>&1; then
       emit_finding \
         "gemini.approval_mode" \
         "medium" \
@@ -185,14 +185,14 @@ check_approval_mode() {
 # trustedFolders.json contains a broad path entry.
 check_trusted_folders_bounded() {
   [[ -f "$TRUSTED_FOLDERS" ]] || return 0
-  jq -e . "$TRUSTED_FOLDERS" >/dev/null 2>&1 || return 0
+  jq -e . "$TRUSTED_FOLDERS" > /dev/null 2>&1 || return 0
   # Heuristic: extract all string keys (object form) and string values that
   # look like paths. Flag any broad pattern.
   local broad
   broad=$(jq -r '
     (if type == "object" then keys[] else (.[]? // empty) end)
     | select(type == "string")
-  ' "$TRUSTED_FOLDERS" 2>/dev/null \
+  ' "$TRUSTED_FOLDERS" 2> /dev/null \
     | grep -E '^(/|~|\$HOME|/Users|/home)/?$' | head -1 || true)
   if [[ -n "$broad" ]]; then
     emit_finding \
@@ -208,12 +208,12 @@ check_trusted_folders_bounded() {
 # Info: enumerate trusted folders so the user can prune what they no longer need.
 check_trusted_folders_review() {
   [[ -f "$TRUSTED_FOLDERS" ]] || return 0
-  jq -e . "$TRUSTED_FOLDERS" >/dev/null 2>&1 || return 0
+  jq -e . "$TRUSTED_FOLDERS" > /dev/null 2>&1 || return 0
   local list count
   list=$(jq -r '
     (if type == "object" then keys[] else (.[]? // empty) end)
     | select(type == "string")
-  ' "$TRUSTED_FOLDERS" 2>/dev/null | paste -sd, - || true)
+  ' "$TRUSTED_FOLDERS" 2> /dev/null | paste -sd, - || true)
   count=$(echo "$list" | tr ',' '\n' | grep -c . || true)
   [[ "$count" == "0" ]] && return 0
   emit_finding \
@@ -232,7 +232,7 @@ check_guidance_present() {
   local f
   for f in "GEMINI.md" "$HOME/GEMINI.md"; do
     [[ -f "$f" ]] || continue
-    if grep -q "sandshell" "$f" 2>/dev/null; then
+    if grep -q "sandshell" "$f" 2> /dev/null; then
       found=true
       break
     fi
@@ -282,7 +282,7 @@ check_sandbox_linux_runtime_missing() {
   local configured_runtime=""
   while read -r scope path; do
     local val
-    val=$(jq -r '.tools.sandbox // empty' "$path" 2>/dev/null || true)
+    val=$(jq -r '.tools.sandbox // empty' "$path" 2> /dev/null || true)
     if [[ -n "$val" && "$val" != "null" ]]; then
       configured_runtime="$val"
       break
@@ -290,7 +290,7 @@ check_sandbox_linux_runtime_missing() {
   done < <(existing_scopes)
 
   if [[ -n "$configured_runtime" ]]; then
-    if ! command -v "$configured_runtime" >/dev/null 2>&1; then
+    if ! command -v "$configured_runtime" > /dev/null 2>&1; then
       emit_finding \
         "gemini.sandbox.linux_runtime_missing" \
         "high" \
@@ -300,9 +300,9 @@ check_sandbox_linux_runtime_missing() {
     fi
   else
     # No tools.sandbox set anywhere → check if any runtime is available.
-    if ! command -v docker >/dev/null 2>&1 \
-       && ! command -v podman >/dev/null 2>&1 \
-       && ! command -v lxc >/dev/null 2>&1; then
+    if ! command -v docker > /dev/null 2>&1 \
+      && ! command -v podman > /dev/null 2>&1 \
+      && ! command -v lxc > /dev/null 2>&1; then
       emit_finding \
         "gemini.sandbox.linux_runtime_missing" \
         "high" \

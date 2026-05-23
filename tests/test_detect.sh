@@ -21,7 +21,7 @@ mkdir -p "$TMPDIR_TEST/inv/home" "$TMPDIR_TEST/inv/cwd"
 out=$(run_detect "$TMPDIR_TEST/inv/home" "$TMPDIR_TEST/inv/cwd")
 
 for field in os arch native_sandbox dep_jq dep_python3 dep_tomllib \
-             agent_claude agent_codex agent_gemini agent_amp; do
+  agent_claude agent_codex agent_gemini agent_amp; do
   echo "$out" | grep -qE "^${field}=" \
     || fail "expected '${field}=' in detect output, got: $out"
 done
@@ -32,8 +32,8 @@ echo "$out" | grep -qE "^os=(darwin|linux)$" \
 
 # detect must NOT emit safety-summary fields (those moved to audit --summary).
 for forbidden in cc_sandbox_configured codex_sandbox_configured \
-                 gemini_sandbox_configured audit_trail_hooks_configured \
-                 claude_pre_bash_hook_configured bash_guard_configured; do
+  gemini_sandbox_configured audit_trail_hooks_configured \
+  claude_pre_bash_hook_configured bash_guard_configured; do
   if echo "$out" | grep -qE "^${forbidden}="; then
     fail "detect should not emit safety field '${forbidden}=' (moved to audit --summary): $out"
   fi
