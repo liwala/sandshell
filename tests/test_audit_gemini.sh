@@ -77,6 +77,18 @@ assert_no_finding "$out" "gemini.disable_yolo"
 assert_no_finding "$out" "gemini.disable_always_allow"
 assert_no_finding "$out" "gemini.approval_mode"
 
+# Restricted PATH for presence-sensitive cases. System dirs are NOT a safe
+# stand-in for "nothing installed" — GitHub's ubuntu runners ship docker at
+# /usr/bin/docker, which made case 4/5's expected linux_runtime_missing
+# finding (correctly) not fire. Symlink only the tools the adapter needs so
+# docker/podman/lxc/gemini/agy presence is controlled entirely by the test.
+RESTRICTED_BIN="$TMPDIR_TEST/restricted-bin"
+mkdir -p "$RESTRICTED_BIN"
+for tool in bash sh jq grep head paste tr uname; do
+  tool_path="$(command -v "$tool" 2>/dev/null || true)"
+  [[ -n "$tool_path" ]] && ln -s "$tool_path" "$RESTRICTED_BIN/$tool"
+done
+
 # Helper for OS-mocked runs.
 run_gemini_os() {
   local home="$1" cwd="$2" os="$3" path_override="${4:-}"
@@ -104,7 +116,7 @@ mkdir -p "$TMPDIR_TEST/case4/home/.gemini"
 cat > "$TMPDIR_TEST/case4/home/.gemini/settings.json" <<'EOF'
 {"tools": {"sandboxNetworkAccess": false}}
 EOF
-out=$(run_gemini_os "$TMPDIR_TEST/case4/home" "$TMPDIR_TEST/case4/cwd" "Linux" "/usr/bin:/bin")
+out=$(run_gemini_os "$TMPDIR_TEST/case4/home" "$TMPDIR_TEST/case4/cwd" "Linux" "$RESTRICTED_BIN")
 assert_finding "$out" "gemini.sandbox.linux_runtime_missing"
 
 # Case 5: Linux + tools.sandbox = "docker" but docker not installed →
@@ -113,7 +125,7 @@ mkdir -p "$TMPDIR_TEST/case5/home/.gemini"
 cat > "$TMPDIR_TEST/case5/home/.gemini/settings.json" <<'EOF'
 {"tools": {"sandbox": "docker", "sandboxNetworkAccess": false}}
 EOF
-out=$(run_gemini_os "$TMPDIR_TEST/case5/home" "$TMPDIR_TEST/case5/cwd" "Linux" "/usr/bin:/bin")
+out=$(run_gemini_os "$TMPDIR_TEST/case5/home" "$TMPDIR_TEST/case5/cwd" "Linux" "$RESTRICTED_BIN")
 assert_finding "$out" "gemini.sandbox.linux_runtime_missing"
 
 # Case 6: Linux + tools.sandbox = "docker" with docker present → no linux_*
@@ -127,7 +139,7 @@ chmod +x "$TMPDIR_TEST/case6/fakebin/docker"
 cat > "$TMPDIR_TEST/case6/home/.gemini/settings.json" <<'EOF'
 {"tools": {"sandbox": "docker", "sandboxNetworkAccess": false}}
 EOF
-out=$(run_gemini_os "$TMPDIR_TEST/case6/home" "$TMPDIR_TEST/case6/cwd" "Linux" "$TMPDIR_TEST/case6/fakebin:/usr/bin:/bin")
+out=$(run_gemini_os "$TMPDIR_TEST/case6/home" "$TMPDIR_TEST/case6/cwd" "Linux" "$TMPDIR_TEST/case6/fakebin:$RESTRICTED_BIN")
 assert_no_finding "$out" "gemini.sandbox.linux_invalid"
 assert_no_finding "$out" "gemini.sandbox.linux_runtime_missing"
 
@@ -142,9 +154,8 @@ assert_no_finding "$out" "gemini.sandbox.linux_invalid"
 assert_no_finding "$out" "gemini.sandbox.linux_runtime_missing"
 
 # --- Antigravity CLI (agy) transition cases ---
-# PATH is pinned to system dirs (plus a fakebin) so 'gemini'/'agy' presence is
-# controlled by the test, not by whatever is installed on the host. jq resolves
-# from /usr/bin on both CI and macOS 15+, same as cases 4-6.
+# PATH is pinned to RESTRICTED_BIN (plus a fakebin) so 'gemini'/'agy' presence is
+# controlled by the test, not by whatever is installed on the host.
 run_gemini_path() {
   local home="$1" cwd="$2" path="$3"
   mkdir -p "$home" "$cwd"
@@ -169,7 +180,7 @@ cat > "$TMPDIR_TEST/case8/home/.gemini/settings.json" <<'EOF'
 {"security": {"disableYoloMode": false}}
 EOF
 out=$(run_gemini_path "$TMPDIR_TEST/case8/home" "$TMPDIR_TEST/case8/cwd" \
-  "$TMPDIR_TEST/case8/fakebin:/usr/bin:/bin")
+  "$TMPDIR_TEST/case8/fakebin:$RESTRICTED_BIN")
 assert_finding "$out" "gemini.agy_transition"
 echo "$out" | grep '"id":"gemini.agy_transition"' | grep -q '"severity":"high"' \
   || fail "case8: agy_transition should be high when gemini binary is absent, got: $out"
@@ -182,7 +193,7 @@ cat > "$TMPDIR_TEST/case9/home/.gemini/settings.json" <<'EOF'
 {"tools": {"sandbox": "docker"}}
 EOF
 out=$(run_gemini_path "$TMPDIR_TEST/case9/home" "$TMPDIR_TEST/case9/cwd" \
-  "$TMPDIR_TEST/case9/fakebin:/usr/bin:/bin")
+  "$TMPDIR_TEST/case9/fakebin:$RESTRICTED_BIN")
 assert_finding "$out" "gemini.agy_transition"
 echo "$out" | grep '"id":"gemini.agy_transition"' | grep -q '"severity":"info"' \
   || fail "case9: agy_transition should be info when gemini is also installed, got: $out"
@@ -192,7 +203,7 @@ echo "$out" | grep '"id":"gemini.agy_transition"' | grep -q '"severity":"info"' 
 # misleading legacy criticals.
 mkdir -p "$TMPDIR_TEST/case10/home/.gemini/antigravity-cli"
 out=$(run_gemini_path "$TMPDIR_TEST/case10/home" "$TMPDIR_TEST/case10/cwd" \
-  "/usr/bin:/bin")
+  "$RESTRICTED_BIN")
 assert_finding "$out" "gemini.agy_transition"
 assert_no_finding "$out" "gemini.sandbox_enabled"
 assert_no_finding "$out" "gemini.folder_trust_enabled"
@@ -203,7 +214,7 @@ cat > "$TMPDIR_TEST/case11/home/.gemini/settings.json" <<'EOF'
 {"tools": {"sandbox": "docker"}}
 EOF
 out=$(run_gemini_path "$TMPDIR_TEST/case11/home" "$TMPDIR_TEST/case11/cwd" \
-  "/usr/bin:/bin")
+  "$RESTRICTED_BIN")
 assert_no_finding "$out" "gemini.agy_transition"
 
 echo "PASS: gemini audit checks (sandbox, folder trust, yolo, approval, trusted folders, linux backend, agy transition)"
