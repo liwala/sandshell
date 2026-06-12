@@ -141,4 +141,69 @@ out=$(run_gemini_os "$TMPDIR_TEST/case7/home" "$TMPDIR_TEST/case7/cwd" "Darwin")
 assert_no_finding "$out" "gemini.sandbox.linux_invalid"
 assert_no_finding "$out" "gemini.sandbox.linux_runtime_missing"
 
-echo "PASS: gemini audit checks (sandbox, folder trust, yolo, approval, trusted folders, linux backend)"
+# --- Antigravity CLI (agy) transition cases ---
+# PATH is pinned to system dirs (plus a fakebin) so 'gemini'/'agy' presence is
+# controlled by the test, not by whatever is installed on the host. jq resolves
+# from /usr/bin on both CI and macOS 15+, same as cases 4-6.
+run_gemini_path() {
+  local home="$1" cwd="$2" path="$3"
+  mkdir -p "$home" "$cwd"
+  (cd "$cwd" && PATH="$path" HOME="$home" "$ADAPTER" 2>/dev/null)
+}
+
+make_fake_bin() {
+  local dir="$1"; shift
+  mkdir -p "$dir"
+  local name
+  for name in "$@"; do
+    printf '#!/bin/sh\nexit 0\n' > "$dir/$name"
+    chmod +x "$dir/$name"
+  done
+}
+
+# Case 8: agy installed, gemini binary absent, Gemini config still present →
+# agy_transition fires high and the legacy checks still run against the config.
+mkdir -p "$TMPDIR_TEST/case8/home/.gemini"
+make_fake_bin "$TMPDIR_TEST/case8/fakebin" agy
+cat > "$TMPDIR_TEST/case8/home/.gemini/settings.json" <<'EOF'
+{"security": {"disableYoloMode": false}}
+EOF
+out=$(run_gemini_path "$TMPDIR_TEST/case8/home" "$TMPDIR_TEST/case8/cwd" \
+  "$TMPDIR_TEST/case8/fakebin:/usr/bin:/bin")
+assert_finding "$out" "gemini.agy_transition"
+echo "$out" | grep '"id":"gemini.agy_transition"' | grep -q '"severity":"high"' \
+  || fail "case8: agy_transition should be high when gemini binary is absent, got: $out"
+assert_finding "$out" "gemini.sandbox_enabled"
+
+# Case 9: agy and gemini both installed → agy_transition fires at info.
+mkdir -p "$TMPDIR_TEST/case9/home/.gemini"
+make_fake_bin "$TMPDIR_TEST/case9/fakebin" agy gemini
+cat > "$TMPDIR_TEST/case9/home/.gemini/settings.json" <<'EOF'
+{"tools": {"sandbox": "docker"}}
+EOF
+out=$(run_gemini_path "$TMPDIR_TEST/case9/home" "$TMPDIR_TEST/case9/cwd" \
+  "$TMPDIR_TEST/case9/fakebin:/usr/bin:/bin")
+assert_finding "$out" "gemini.agy_transition"
+echo "$out" | grep '"id":"gemini.agy_transition"' | grep -q '"severity":"info"' \
+  || fail "case9: agy_transition should be info when gemini is also installed, got: $out"
+
+# Case 10: agy-only host — ~/.gemini exists only because agy nests its config
+# there; no Gemini CLI config at all → only the transition finding, no
+# misleading legacy criticals.
+mkdir -p "$TMPDIR_TEST/case10/home/.gemini/antigravity-cli"
+out=$(run_gemini_path "$TMPDIR_TEST/case10/home" "$TMPDIR_TEST/case10/cwd" \
+  "/usr/bin:/bin")
+assert_finding "$out" "gemini.agy_transition"
+assert_no_finding "$out" "gemini.sandbox_enabled"
+assert_no_finding "$out" "gemini.folder_trust_enabled"
+
+# Case 11: no agy anywhere → no transition finding.
+mkdir -p "$TMPDIR_TEST/case11/home/.gemini"
+cat > "$TMPDIR_TEST/case11/home/.gemini/settings.json" <<'EOF'
+{"tools": {"sandbox": "docker"}}
+EOF
+out=$(run_gemini_path "$TMPDIR_TEST/case11/home" "$TMPDIR_TEST/case11/cwd" \
+  "/usr/bin:/bin")
+assert_no_finding "$out" "gemini.agy_transition"
+
+echo "PASS: gemini audit checks (sandbox, folder trust, yolo, approval, trusted folders, linux backend, agy transition)"

@@ -21,7 +21,7 @@ mkdir -p "$TMPDIR_TEST/inv/home" "$TMPDIR_TEST/inv/cwd"
 out=$(run_detect "$TMPDIR_TEST/inv/home" "$TMPDIR_TEST/inv/cwd")
 
 for field in os arch native_sandbox dep_jq dep_python3 dep_tomllib \
-             agent_claude agent_codex agent_gemini agent_amp; do
+             agent_claude agent_codex agent_gemini agent_amp agent_antigravity; do
   echo "$out" | grep -qE "^${field}=" \
     || fail "expected '${field}=' in detect output, got: $out"
 done
@@ -42,10 +42,17 @@ done
 # Each agent_* field must be one of: installed, config_only, absent.
 # (We can't assert specifically 'absent' even with a fake HOME, because
 # `command -v` checks PATH, which the test doesn't override.)
-for agent in claude codex gemini amp; do
+for agent in claude codex gemini amp antigravity; do
   echo "$out" | grep -qE "^agent_${agent}=(installed|config_only|absent)$" \
     || fail "expected agent_${agent} to be installed/config_only/absent, got: $out"
 done
+
+# Antigravity config lives inside ~/.gemini — agy's subdirectory must register
+# as config_only for antigravity without flipping agent_gemini's semantics.
+mkdir -p "$TMPDIR_TEST/with_agy/home/.gemini/antigravity-cli"
+out=$(run_detect "$TMPDIR_TEST/with_agy/home" "$TMPDIR_TEST/with_agy/cwd")
+echo "$out" | grep -qE "^agent_antigravity=(config_only|installed)$" \
+  || fail "expected agent_antigravity=config_only or installed when ~/.gemini/antigravity-cli exists, got: $out"
 
 # When ~/.claude exists, agent_claude is at least config_only.
 mkdir -p "$TMPDIR_TEST/with_claude/home/.claude"

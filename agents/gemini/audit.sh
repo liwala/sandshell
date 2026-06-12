@@ -28,9 +28,20 @@ is_gemini_present() {
     || [[ -d ".gemini" ]]
 }
 
+# Antigravity CLI (agy) — Gemini CLI's closed-source successor (consumer-tier
+# sunset 2026-06-18). agy reuses ~/.gemini/ but reads its own config under
+# ~/.gemini/antigravity-cli/, so its presence alone no longer implies Gemini CLI.
+is_agy_present() {
+  command -v agy >/dev/null 2>&1 \
+    || [[ -d "$HOME/.gemini/antigravity-cli" ]]
+}
+
 if ! is_gemini_present; then
   exit 0
 fi
+
+GEMINI_BIN_PRESENT=false
+command -v gemini >/dev/null 2>&1 && GEMINI_BIN_PRESENT=true
 
 USER_CFG="$HOME/.gemini/settings.json"
 WORKSPACE_CFG=".gemini/settings.json"
@@ -248,6 +259,33 @@ check_guidance_present() {
   fi
 }
 
+# ---------- gemini.agy_transition ----------
+# Antigravity CLI (agy) detected. agy's security settings (sandbox, approval
+# modes) are undocumented and it ignores ~/.gemini/settings.json, so the
+# checks in this adapter say nothing about agy sessions. Info when Gemini CLI
+# is still installed (the audit remains accurate for it); high when only agy
+# is present (a passing Gemini audit would be false coverage).
+check_agy_transition() {
+  is_agy_present || return 0
+  if [[ "$GEMINI_BIN_PRESENT" = true ]]; then
+    emit_finding \
+      "gemini.agy_transition" \
+      "info" \
+      "Antigravity CLI (agy) detected alongside Gemini CLI — this audit covers Gemini CLI only" \
+      "" \
+      "For agy sessions, prefer --sandbox and avoid --dangerously-skip-permissions; sandshell has no agy adapter yet (see KNOWN_ISSUES.md)" \
+      "Google sunsets Gemini CLI for consumer tiers on 2026-06-18 (enterprise Code Assist licenses keep access). agy reads its own config under ~/.gemini/antigravity-cli/ and its security settings are not yet documented."
+  else
+    emit_finding \
+      "gemini.agy_transition" \
+      "high" \
+      "Antigravity CLI (agy) is installed but Gemini CLI is not — the settings audited here do not govern agy" \
+      "" \
+      "Treat agy as unaudited: prefer --sandbox, avoid --dangerously-skip-permissions; a sandshell agy adapter is blocked on Google documenting agy's settings schema (see KNOWN_ISSUES.md)" \
+      "agy reuses ~/.gemini/ but reads its own config under ~/.gemini/antigravity-cli/. A passing Gemini audit gives no coverage for agy sessions."
+  fi
+}
+
 # ---------- gemini.sandbox.linux_invalid ----------
 # tools.sandbox = "sandbox-exec" is a macOS-only value (Seatbelt). On Linux,
 # sandbox-exec doesn't exist as a binary; the Gemini CLI's spawn will fail at
@@ -313,6 +351,17 @@ check_sandbox_linux_runtime_missing() {
   fi
 }
 
+# agy-only host: ~/.gemini exists only because agy nests its config there.
+# With no gemini binary and no Gemini CLI config to audit, the legacy checks
+# would emit misleading criticals about settings no installed tool reads —
+# report the transition finding and stop.
+if is_agy_present && [[ "$GEMINI_BIN_PRESENT" = false ]] \
+   && [[ ! -f "$USER_CFG" && ! -f "$WORKSPACE_CFG" && ! -f "$TRUSTED_FOLDERS" ]]; then
+  check_agy_transition
+  exit 0
+fi
+
+check_agy_transition
 check_sandbox_enabled
 check_sandbox_network_off
 check_sandbox_paths_bounded
