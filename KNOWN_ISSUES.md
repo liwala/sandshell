@@ -11,6 +11,14 @@ limitation. Sandshell's audit checks reference these entries via their
 
 ## Active
 
+### Gemini CLI → Antigravity CLI (agy) — successor's security settings undocumented
+
+- **Tracking:** [Google Developers Blog announcement](https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/), [google-gemini/gemini-cli discussion #27274](https://github.com/google-gemini/gemini-cli/discussions/27274), migration doc at `antigravity.google/docs/gcli-migration`
+- **Timeline:** Announced 2026-05-19. On **2026-06-18** Gemini CLI stops serving Google AI Pro, Ultra, and free Code Assist users. Gemini Code Assist Standard/Enterprise licenses and paid Gemini API keys keep Gemini CLI access, so the `gemini` adapter stays for enterprise/legacy use.
+- **Impact:** Antigravity CLI (binary `agy`) is closed-source (Go). It reuses `~/.gemini/` but reads its own config nested under `~/.gemini/antigravity-cli/` (own `settings.json`; MCP servers split into `mcp_config.json` with `serverUrl` instead of `url`; workspace skills move to `.agents/skills/`). As of 2026-06, there is **no public documentation** for agy equivalents of the settings sandshell manages for Gemini CLI: `tools.sandbox`, `tools.sandboxNetworkAccess`, `security.folderTrust`, `security.disableYoloMode`, `security.disableAlwaysAllow`, `general.defaultApprovalMode`. Known security surface so far: a `--sandbox` launch flag ("terminal restrictions"), a `--dangerously-skip-permissions` bypass flag, and `agy doctor` / `agy inspect` diagnostics. Hooks reportedly carry over in Antigravity 2.0's JSON format.
+- **What sandshell does today:** `detect` reports `agent_antigravity`; the Gemini audit emits `gemini.agy_transition` (info when both CLIs are installed, high when only agy is — so a passing Gemini audit isn't mistaken for agy coverage) and skips the legacy Gemini checks on agy-only hosts with no Gemini config; the host audit's alias/function bypass checks cover `agy` with `--dangerously-skip-permissions`; `apply gemini` keeps writing Gemini CLI settings and warns when agy is present.
+- **Blocked:** a real agy adapter (`setup-agy.sh`, `agents/agy/audit.sh`) needs Google to document agy's settings schema. Because agy is closed-source, the verification approach used for Gemini CLI (reading `packages/cli/src/utils/sandbox.ts`) is unavailable — once a schema is published, claims will need empirical verification (probe writes/network from inside an `agy --sandbox` session).
+
 ### Gemini CLI — Network restriction not enforced under sandbox-exec on macOS
 
 - **Tracking:** [google-gemini/gemini-cli#20381](https://github.com/google-gemini/gemini-cli/issues/20381) (proposal for the missing layer), [#20046](https://github.com/google-gemini/gemini-cli/issues/20046) (V1 macOS post-intent execution, includes "blocks network" in scope)

@@ -39,6 +39,12 @@ Writes:
   - general.defaultApprovalMode = "default"
 
 For real network containment on macOS, see KNOWN_ISSUES.md.
+
+NOTE: Google sunsets Gemini CLI for consumer tiers on 2026-06-18 in favor of
+Antigravity CLI (agy). These settings apply to Gemini CLI only — agy reads its
+own config under ~/.gemini/antigravity-cli/ and is not yet covered by
+sandshell (its security settings are undocumented; see KNOWN_ISSUES.md).
+Gemini Code Assist Standard/Enterprise licenses keep Gemini CLI access.
 EOF
 }
 
@@ -251,6 +257,15 @@ EOF
 EOF
     ;;
 esac
+
+if command -v agy >/dev/null 2>&1 || [[ -d "$HOME/.gemini/antigravity-cli" ]]; then
+  cat <<'EOF'
+
+NOTE: Antigravity CLI (agy) detected on this host. The settings above govern
+Gemini CLI only — agy reads its own config under ~/.gemini/antigravity-cli/
+and its security settings are not yet documented. See KNOWN_ISSUES.md.
+EOF
+fi
 
 cat <<EOF
 

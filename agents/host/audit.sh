@@ -47,7 +47,7 @@ shell_rc_files() {
 # ---------- host.shell_alias_bypass ----------
 # Aliases for known agents that include known bypass flags.
 check_shell_alias_bypass() {
-  local agents='claude|codex|gemini|amp'
+  local agents='claude|codex|gemini|amp|agy'
   local bypass_flags='--dangerously-skip-permissions|--full-auto|--dangerously-bypass-approvals-and-sandbox|--dangerously-allow-all|--yolo|--approval-mode=yolo'
 
   while IFS= read -r rc; do
@@ -82,7 +82,7 @@ check_shell_alias_bypass() {
 # look for any bypass flag inside. Single-line and multi-line definitions are
 # both supported via awk's brace-depth tracking.
 check_shell_function_bypass() {
-  local agents='claude|codex|gemini|amp'
+  local agents='claude|codex|gemini|amp|agy'
   local bypass_flags='--dangerously-skip-permissions|--full-auto|--dangerously-bypass-approvals-and-sandbox|--dangerously-allow-all|--yolo|--approval-mode=yolo'
 
   while IFS= read -r rc; do

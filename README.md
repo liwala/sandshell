@@ -185,6 +185,8 @@ Per-agent adapters live in `agents/<name>/audit.sh`. Each reads the agent's real
 | `codex`      | **Sandbox on, approvals required, no escape hatches.** `sandbox_mode != danger-full-access`, `approval_policy != never`, no broad `writable_roots`, no `trust_level = "trusted"` for `~`/`/`, no network in workspace mode. PreToolUse + PostToolUse hooks present, `[features] codex_hooks = true` set (catches the silent-disable trap where hooks.json is ignored). |
 | `gemini`     | **Sandbox on, folder trust on, YOLO and always-allow off.** `tools.sandbox` configured, `sandboxNetworkAccess = false`, `security.folderTrust.enabled`, `security.disableYoloMode`, approval mode set, no wildcard entries in `trustedFolders.json`. |
 
+> **Gemini CLI sunset:** Google retires Gemini CLI for consumer tiers on **2026-06-18** in favor of the closed-source [Antigravity CLI (`agy`)](https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/). Enterprise Gemini Code Assist licenses keep access, so the `gemini` adapter stays. `agy`'s security settings are not yet documented — sandshell detects it (`agent_antigravity`, `gemini.agy_transition`) but cannot audit or configure it yet. See [KNOWN_ISSUES.md](KNOWN_ISSUES.md).
+
 The credential check classifies each export by injection source: `$(op …)`, `$(aws-vault …)`, `$(vault …)`, `$(pass …)`, `$(gh auth token)`, `$(gcloud secrets …)`, `$(infisical …)`, and other recognized secrets-manager invocations stay silent; only literal values are flagged at medium.
 
 Adapters self-skip when their agent isn't installed.

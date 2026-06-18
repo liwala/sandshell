@@ -81,6 +81,13 @@ agent_present claude  claude  "$HOME/.claude"  "$HOME/.claude.json"  ".claude"
 agent_present codex   codex   "$HOME/.codex"
 agent_present gemini  gemini  "$HOME/.gemini"  ".gemini"
 agent_present amp     amp     "$HOME/.config/amp"  ".amp"
+# Antigravity CLI (agy) — Gemini CLI's successor. It nests its config inside
+# ~/.gemini/, so check the agy-specific subdirectory, not ~/.gemini itself.
+agent_present antigravity  agy  "$HOME/.gemini/antigravity-cli"
+
+if command -v agy >/dev/null 2>&1 || [[ -d "$HOME/.gemini/antigravity-cli" ]]; then
+  echo "# Antigravity CLI (agy) replaces Gemini CLI for consumer tiers as of 2026-06-18; sandshell audit/apply do not cover agy yet (see KNOWN_ISSUES.md)"
+fi
 
 # Pointer to audit if any agent is present.
 if command -v claude >/dev/null 2>&1 || [[ -d "$HOME/.claude" ]] \

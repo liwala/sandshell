@@ -70,6 +70,27 @@ out=$(HOME="$TMPDIR_TEST/case5" "$ROOT/scripts/setup-gemini.sh" --show 2>&1)
 # ---------- Linux backend selection ----------
 unset SANDSHELL_FAKE_UNAME
 
+# A PATH with no container runtime. /usr/bin:/bin is NOT a safe stand-in for
+# "nothing installed" — GitHub's ubuntu runners ship docker at /usr/bin/docker,
+# so the no-runtime cases below would (correctly) pick it up and fail. Mirror
+# the real PATH into a scratch dir, symlinking everything except the runtimes
+# setup-gemini.sh probes for, so docker/podman/lxc/runsc presence is controlled
+# entirely by the test while every other tool the script needs stays reachable.
+NO_RUNTIME_BIN="$TMPDIR_TEST/no-runtime-bin"
+mkdir -p "$NO_RUNTIME_BIN"
+IFS=':' read -ra _path_dirs <<< "$PATH"
+for _dir in "${_path_dirs[@]}"; do
+  [[ -d "$_dir" ]] || continue
+  for _bin in "$_dir"/*; do
+    [[ -e "$_bin" ]] || continue
+    _name="$(basename "$_bin")"
+    case "$_name" in
+      docker|podman|lxc|lxc-*|runsc) continue ;;
+    esac
+    [[ -e "$NO_RUNTIME_BIN/$_name" ]] || ln -s "$_bin" "$NO_RUNTIME_BIN/$_name" 2>/dev/null || true
+  done
+done
+
 # Case 6: Linux + docker available → tools.sandbox = "docker".
 mkdir -p "$TMPDIR_TEST/case6/fakebin"
 cat > "$TMPDIR_TEST/case6/fakebin/docker" <<'EOF'
@@ -89,20 +110,16 @@ cat > "$TMPDIR_TEST/case7/fakebin/podman" <<'EOF'
 exit 0
 EOF
 chmod +x "$TMPDIR_TEST/case7/fakebin/podman"
-# Restrict PATH so neither docker nor a real one leak in. jq still needs to
-# be reachable, so we keep /usr/bin and /opt/homebrew/bin in the search path.
-SANDSHELL_FAKE_UNAME=Linux PATH="$TMPDIR_TEST/case7/fakebin:/usr/bin:/bin:/opt/homebrew/bin" \
+# Restrict PATH to the no-runtime bin (docker stripped) plus the fake podman,
+# so podman is the only runtime visible regardless of what the host has.
+SANDSHELL_FAKE_UNAME=Linux PATH="$TMPDIR_TEST/case7/fakebin:$NO_RUNTIME_BIN" \
   HOME="$TMPDIR_TEST/case7" "$ROOT/scripts/setup-gemini.sh" user >/dev/null
-# (This case relies on docker NOT being on the restricted PATH; if the host
-# happens to have it in /usr/bin, we skip the assertion rather than fail.)
-if ! command -v docker >/dev/null 2>&1 && [[ -x "$TMPDIR_TEST/case7/fakebin/podman" ]]; then
-  actual=$(jq -r '.tools.sandbox // "<unset>"' "$TMPDIR_TEST/case7/.gemini/settings.json")
-  [[ "$actual" == "podman" ]] \
-    || fail "case7: expected tools.sandbox=podman, got: $actual"
-fi
+actual=$(jq -r '.tools.sandbox // "<unset>"' "$TMPDIR_TEST/case7/.gemini/settings.json")
+[[ "$actual" == "podman" ]] \
+  || fail "case7: expected tools.sandbox=podman, got: $actual"
 
 # Case 8: Linux + neither docker nor podman → tools.sandbox is OMITTED.
-SANDSHELL_FAKE_UNAME=Linux PATH=/usr/bin:/bin \
+SANDSHELL_FAKE_UNAME=Linux PATH="$NO_RUNTIME_BIN" \
   HOME="$TMPDIR_TEST/case8" "$ROOT/scripts/setup-gemini.sh" user >/dev/null
 config8="$TMPDIR_TEST/case8/.gemini/settings.json"
 [[ -f "$config8" ]] || fail "case8: settings.json was not written"
@@ -118,7 +135,7 @@ mkdir -p "$TMPDIR_TEST/case9/.gemini"
 cat > "$TMPDIR_TEST/case9/.gemini/settings.json" <<'EOF'
 {"sandshell_managed": true, "tools": {"sandbox": "sandbox-exec", "sandboxNetworkAccess": false}}
 EOF
-SANDSHELL_FAKE_UNAME=Linux PATH=/usr/bin:/bin \
+SANDSHELL_FAKE_UNAME=Linux PATH="$NO_RUNTIME_BIN" \
   HOME="$TMPDIR_TEST/case9" "$ROOT/scripts/setup-gemini.sh" user >/dev/null
 [[ "$(jq -r '.tools.sandbox // "<unset>"' "$TMPDIR_TEST/case9/.gemini/settings.json")" == "<unset>" ]] \
   || fail "case9: stale sandbox-exec should be stripped on Linux re-apply"

@@ -2,6 +2,12 @@
 
 All notable changes to this project should be documented in this file.
 
+## Unreleased
+
+### Added
+
+- **Antigravity CLI (agy) transition awareness.** Google sunsets Gemini CLI for consumer tiers on 2026-06-18 in favor of the closed-source Antigravity CLI (`agy`), which reuses `~/.gemini/` but reads its own config under `~/.gemini/antigravity-cli/` and whose security settings are not yet documented. New `gemini.agy_transition` audit finding: info when agy is installed alongside Gemini CLI (the audit stays accurate for Gemini), high when only agy is present (a passing Gemini audit would otherwise read as false coverage). On agy-only hosts with no Gemini CLI config, the legacy Gemini checks are skipped instead of emitting misleading criticals about settings no installed tool reads. `detect` reports `agent_antigravity`; the host audit's alias/function bypass checks now cover `agy` (its documented bypass flag is `--dangerously-skip-permissions`); `apply gemini` warns when agy is present. A real agy adapter is blocked on Google documenting agy's settings schema — tracked in KNOWN_ISSUES.md.
+
 ## 0.3.0 - 2026-05-13
 
 ### Added
